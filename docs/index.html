@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>cutecontainer</title>
+<style>
+  :root {
+    --bg: #fbfbfd;
+    --text: #1d1d1f;
+    --text-secondary: #6e6e73;
+    --accent: #0071e3;
+    --accent-hover: #0077ED;
+    --surface: #ffffff;
+    --border: #d2d2d7;
+    --code-bg: #f5f5f7;
+    --gradient-start: #1d1d1f;
+    --gradient-end: #6e6e73;
+    --hero-bg: linear-gradient(180deg, #000000 0%, #1a1a2e 100%);
+    --card-shadow: 0 4px 24px rgba(0,0,0,0.06);
+    --section-gap: 120px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #000000;
+      --text: #f5f5f7;
+      --text-secondary: #a1a1a6;
+      --surface: #1c1c1e;
+      --border: #38383a;
+      --code-bg: #1c1c1e;
+      --card-shadow: 0 4px 24px rgba(0,0,0,0.3);
+    }
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.5;
+  }
+
+  /* ── Nav ── */
+
+  nav {
+    position: fixed;
+    top: 0;
+    width: 100%;
+    z-index: 100;
+    background: rgba(251,251,253,0.72);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    border-bottom: 0.5px solid var(--border);
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    nav { background: rgba(29,29,31,0.72); }
+  }
+
+  nav .nav-inner {
+    max-width: 980px;
+    width: 100%;
+    padding: 0 22px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  nav .logo {
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--text);
+    text-decoration: none;
+  }
+
+  nav .nav-links a {
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    margin-left: 28px;
+    transition: color 0.2s;
+  }
+
+  nav .nav-links a:hover { color: var(--text); }
+
+  /* ── Hero ── */
+
+  .hero {
+    background: var(--hero-bg);
+    color: white;
+    text-align: center;
+    padding: 160px 22px 120px;
+    min-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .hero h1 {
+    font-size: clamp(48px, 8vw, 80px);
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    line-height: 1.05;
+    margin-bottom: 20px;
+    background: linear-gradient(135deg, #fff 0%, #a1a1a6 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .hero p {
+    font-size: clamp(19px, 2.5vw, 28px);
+    font-weight: 400;
+    color: #a1a1a6;
+    max-width: 640px;
+    line-height: 1.4;
+    margin-bottom: 40px;
+  }
+
+  .hero .badge-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 6px 16px;
+    border-radius: 980px;
+    font-size: 13px;
+    font-weight: 500;
+    border: 1px solid rgba(255,255,255,0.15);
+    color: rgba(255,255,255,0.8);
+    background: rgba(255,255,255,0.06);
+  }
+
+  /* ── Section layout ── */
+
+  section {
+    padding: var(--section-gap) 22px;
+    max-width: 980px;
+    margin: 0 auto;
+  }
+
+  .section-label {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+
+  section h2 {
+    font-size: clamp(32px, 5vw, 48px);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    margin-bottom: 16px;
+  }
+
+  section .subtitle {
+    font-size: clamp(17px, 2vw, 21px);
+    color: var(--text-secondary);
+    max-width: 600px;
+    line-height: 1.5;
+    margin-bottom: 48px;
+  }
+
+  /* ── Cards ── */
+
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+    margin-top: 32px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 28px;
+    box-shadow: var(--card-shadow);
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+
+  .card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+  }
+
+  .card .card-icon {
+    font-size: 32px;
+    margin-bottom: 14px;
+    display: block;
+  }
+
+  .card h3 {
+    font-size: 19px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin-bottom: 6px;
+  }
+
+  .card p {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+  }
+
+  /* ── Module stack ── */
+
+  .module-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 32px;
+    border-radius: 18px;
+    overflow: hidden;
+    box-shadow: var(--card-shadow);
+  }
+
+  .module-row {
+    display: grid;
+    grid-template-columns: 120px 1fr auto;
+    align-items: center;
+    padding: 20px 28px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    gap: 20px;
+  }
+
+  .module-row:last-child { border-bottom: none; }
+
+  .module-name {
+    font-size: 17px;
+    font-weight: 600;
+    font-family: 'SF Mono', SFMono-Regular, Menlo, monospace;
+  }
+
+  .module-desc {
+    font-size: 14px;
+    color: var(--text-secondary);
+  }
+
+  .module-caps {
+    display: flex;
+    gap: 6px;
+  }
+
+  .cap {
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: var(--code-bg);
+    color: var(--text-secondary);
+    white-space: nowrap;
+  }
+
+  .cap.asm { background: #1a3a1a; color: #4ade80; }
+  .cap.gpu { background: #1a2a3a; color: #60a5fa; }
+  .cap.hw  { background: #3a2a1a; color: #fb923c; }
+
+  @media (prefers-color-scheme: light) {
+    .cap.asm { background: #dcfce7; color: #166534; }
+    .cap.gpu { background: #dbeafe; color: #1e40af; }
+    .cap.hw  { background: #ffedd5; color: #9a3412; }
+  }
+
+  /* ── Pipeline diagram ── */
+
+  .pipeline {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    margin: 48px 0;
+    flex-wrap: wrap;
+  }
+
+  .pipeline-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px 24px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    text-align: center;
+    min-width: 120px;
+    box-shadow: var(--card-shadow);
+  }
+
+  .pipeline-step .step-icon { font-size: 24px; margin-bottom: 8px; }
+  .pipeline-step .step-label { font-size: 13px; font-weight: 600; }
+  .pipeline-step .step-detail { font-size: 11px; color: var(--text-secondary); }
+
+  .pipeline-arrow {
+    font-size: 20px;
+    color: var(--text-secondary);
+    padding: 0 8px;
+  }
+
+  /* ── Wrap type table ── */
+
+  .wrap-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 32px;
+    font-size: 14px;
+  }
+
+  .wrap-table th {
+    text-align: left;
+    padding: 12px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .wrap-table td {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+
+  .wrap-table tr:last-child td { border-bottom: none; }
+
+  .wrap-table .type-name {
+    font-family: 'SF Mono', SFMono-Regular, Menlo, monospace;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--accent);
+  }
+
+  .category-header td {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-secondary);
+    padding-top: 24px;
+    background: var(--code-bg);
+  }
+
+  /* ── Code block ── */
+
+  .code-block {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    overflow-x: auto;
+    margin: 24px 0;
+  }
+
+  .code-block code {
+    font-family: 'SF Mono', SFMono-Regular, Menlo, monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text);
+    white-space: pre;
+  }
+
+  /* ── Two column ── */
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 48px;
+    align-items: start;
+  }
+
+  @media (max-width: 720px) {
+    .two-col { grid-template-columns: 1fr; }
+    .module-row { grid-template-columns: 1fr; }
+    .pipeline { flex-direction: column; }
+    .pipeline-arrow { transform: rotate(90deg); }
+  }
+
+  /* ── Footer ── */
+
+  footer {
+    text-align: center;
+    padding: 60px 22px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    border-top: 1px solid var(--border);
+    max-width: 980px;
+    margin: 0 auto;
+  }
+
+  /* ── Fade-in animation ── */
+
+  .fade-in {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+
+  .fade-in.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+</style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav>
+  <div class="nav-inner">
+    <a class="logo" href="#">cutecontainer</a>
+    <div class="nav-links">
+      <a href="#modules">Modules</a>
+      <a href="#container">Container</a>
+      <a href="#wraps">Wraps</a>
+      <a href="#sdk">SDK</a>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<div class="hero">
+  <h1>One container.<br>Every format.</h1>
+  <p>Compression, encryption, spectral imaging, and file management in a single unified library. Built with hand-written assembly and hardware acceleration.</p>
+  <div class="badge-row">
+    <span class="badge">C11</span>
+    <span class="badge">aarch64 + x86_64 ASM</span>
+    <span class="badge">Metal + OpenCL GPU</span>
+    <span class="badge">NVMe Native</span>
+    <span class="badge">Media Engine</span>
+    <span class="badge">NVENC / QSV / AMF</span>
+    <span class="badge">Post-Quantum</span>
+  </div>
+</div>
+
+<!-- Modules -->
+<section id="modules">
+  <div class="section-label">Architecture</div>
+  <h2>Four modules.<br>One library.</h2>
+  <p class="subtitle">Each module is a self-contained codec with its own ASM hot paths. They share a common container format and compose through the SDK.</p>
+
+  <div class="module-stack">
+    <div class="module-row">
+      <div class="module-name">press</div>
+      <div class="module-desc">Extreme compression. 4-way interleaved rANS entropy coding with LZ match finding and 64KB sliding window.</div>
+      <div class="module-caps"><span class="cap asm">ASM</span><span class="cap">encode</span><span class="cap">decode</span></div>
+    </div>
+    <div class="module-row">
+      <div class="module-name">crypt</div>
+      <div class="module-desc">Post-quantum encryption. ML-KEM-768 key encapsulation, AES-256-GCM, SHA3-256, Curve25519 cascade signing, fuse-limited tokens.</div>
+      <div class="module-caps"><span class="cap asm">ASM</span><span class="cap">encode</span><span class="cap">decode</span></div>
+    </div>
+    <div class="module-row">
+      <div class="module-name">film</div>
+      <div class="module-desc">Spectral image codec. 128/256/512-bit wavelength bands with CIE 1931 color science, film characteristic curves, and ProRes hardware encoding.</div>
+      <div class="module-caps"><span class="cap asm">ASM</span><span class="cap gpu">Metal</span><span class="cap hw">Media Engine</span></div>
+    </div>
+    <div class="module-row">
+      <div class="module-name">depo</div>
+      <div class="module-desc">Encrypted containers. Password + temporal + fuse-limited locks, role-based archives, append-only ledger, keychain binding, remote fuse verification.</div>
+      <div class="module-caps"><span class="cap asm">ASM</span><span class="cap">archive</span><span class="cap">ledger</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- Container format -->
+<section id="container">
+  <div class="section-label">Container</div>
+  <h2>The .cute format.</h2>
+  <p class="subtitle">A 64-byte header that describes anything. Type-tagged payloads with stackable compression and encryption layers. One format for every kind of content.</p>
+
+  <div class="pipeline">
+    <div class="pipeline-step">
+      <div class="step-icon">Any file</div>
+      <div class="step-label">Input</div>
+      <div class="step-detail">image, video, scene, doc...</div>
+    </div>
+    <div class="pipeline-arrow">&rarr;</div>
+    <div class="pipeline-step">
+      <div class="step-icon">wrap</div>
+      <div class="step-label">Describe</div>
+      <div class="step-detail">typed metadata</div>
+    </div>
+    <div class="pipeline-arrow">&rarr;</div>
+    <div class="pipeline-step">
+      <div class="step-icon">press</div>
+      <div class="step-label">Compress</div>
+      <div class="step-detail">rANS + LZ</div>
+    </div>
+    <div class="pipeline-arrow">&rarr;</div>
+    <div class="pipeline-step">
+      <div class="step-icon">crypt</div>
+      <div class="step-label">Encrypt</div>
+      <div class="step-detail">Kyber + AES-256</div>
+    </div>
+    <div class="pipeline-arrow">&rarr;</div>
+    <div class="pipeline-step">
+      <div class="step-icon">.cute</div>
+      <div class="step-label">Output</div>
+      <div class="step-detail">single file</div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div>
+      <h3 style="margin-bottom:12px">Header (64 bytes)</h3>
+      <div class="code-block"><code>magic       "CUTE"           4 bytes
+version     0x05             1 byte
+type        content type     1 byte
+layers      compress|encrypt 2 bytes
+payload     size             8 bytes
+original    uncompressed     8 bytes
+meta_size   metadata blob    4 bytes
+hash        SHA3-256         32 bytes
+reserved                     4 bytes</code></div>
+    </div>
+    <div>
+      <h3 style="margin-bottom:12px">Layers stack transparently</h3>
+      <div class="code-block"><code>// compress + encrypt in one call
+cc_container *c = cc_container_create(CC_TYPE_FILM);
+cc_container_set_payload(c, data, len);
+cc_container_set_layers(c,
+    CC_LAYER_COMPRESSED |
+    CC_LAYER_ENCRYPTED);
+cc_container_set_encrypt_key(c, pk);
+cc_container_write(c, &amp;out, &amp;out_len);</code></div>
+    </div>
+  </div>
+
+  <h3 style="margin-top:48px;margin-bottom:12px">Legacy format detection</h3>
+  <p style="color:var(--text-secondary);font-size:15px;margin-bottom:24px">Automatically recognizes files from all previous versions.</p>
+  <div class="card-grid" style="grid-template-columns: repeat(4, 1fr)">
+    <div class="card" style="text-align:center;padding:20px">
+      <div style="font-family:monospace;font-size:15px;font-weight:700;color:var(--accent)">PRSS</div>
+      <p>cutepress v1</p>
+    </div>
+    <div class="card" style="text-align:center;padding:20px">
+      <div style="font-family:monospace;font-size:15px;font-weight:700;color:var(--accent)">CUTE v1</div>
+      <p>cutecrypt pipe</p>
+    </div>
+    <div class="card" style="text-align:center;padding:20px">
+      <div style="font-family:monospace;font-size:15px;font-weight:700;color:var(--accent)">CUTE v4</div>
+      <p>cutedepo</p>
+    </div>
+    <div class="card" style="text-align:center;padding:20px">
+      <div style="font-family:monospace;font-size:15px;font-weight:700;color:var(--accent)">CFSP</div>
+      <p>cutefilm spectral</p>
+    </div>
+  </div>
+</section>
+
+<!-- Wraps -->
+<section id="wraps">
+  <div class="section-label">Universal Content Description</div>
+  <h2>44 wrapper types.</h2>
+  <p class="subtitle">Structured metadata schemas that describe what's inside a container. Wrappers compose, reference external assets, and support variants for multi-representation content.</p>
+
+  <div class="two-col" style="margin-bottom:48px">
+    <div>
+      <h3 style="margin-bottom:8px">Composition</h3>
+      <p style="color:var(--text-secondary);font-size:15px">Multiple wrappers on one payload. An EXR file becomes <code style="font-size:13px;background:var(--code-bg);padding:2px 6px;border-radius:4px">image + exr_ext + hdr + aces</code>.</p>
+    </div>
+    <div>
+      <h3 style="margin-bottom:8px">Variants</h3>
+      <p style="color:var(--text-secondary);font-size:15px">Same content in multiple representations. Ship HDR + SDR, hi-res + proxy, LOD 0-3 in one file.</p>
+    </div>
+  </div>
+
+  <table class="wrap-table">
+    <thead><tr><th>Type</th><th>Description</th><th>Formats</th></tr></thead>
+    <tbody>
+      <tr class="category-header"><td colspan="3">Media &amp; Film</td></tr>
+      <tr><td class="type-name">image</td><td>Raster image with full EXR feature set: tiled, deep pixels, multi-part, data/display windows</td><td>PNG, JPG, TIFF, BMP, WebP, PSD, TGA</td></tr>
+      <tr><td class="type-name">spectral</td><td>Wavelength-sampled spectral bands (4/8/16 bands, 380-780nm)</td><td>cutefilm native</td></tr>
+      <tr><td class="type-name">exr_ext</td><td>Deep pixels, stereo/multi-view, AOV render passes, per-channel format</td><td>OpenEXR</td></tr>
+      <tr><td class="type-name">dpx</td><td>Film scan metadata: gauge, timecode, edge code, transfer curves</td><td>DPX, Cineon</td></tr>
+      <tr><td class="type-name">hdr</td><td>HDR10/HDR10+/Dolby Vision/HLG mastering display, MaxCLL, tone mapping</td><td>HDR grading</td></tr>
+      <tr><td class="type-name">aces</td><td>Academy Color pipeline: encoding, IDT/LMT/ODT/RRT chain</td><td>ACES workflow</td></tr>
+      <tr><td class="type-name">audio</td><td>Sample rate, channels, bit depth, codec, duration</td><td>WAV, FLAC, AAC, MP3, Opus</td></tr>
+      <tr><td class="type-name">video</td><td>Resolution, FPS, codec, ProRes profile, color space, interlace</td><td>MOV, MP4, MKV</td></tr>
+      <tr><td class="type-name">lut</td><td>1D/3D color look-up tables with in/out color spaces</td><td>.cube, .3dl</td></tr>
+      <tr><td class="type-name">profile</td><td>Color/device profile: primaries, white point, gamma/TRC</td><td>ICC, ACES</td></tr>
+      <tr><td class="type-name">timeline</td><td>Edit decision list: tracks, clips, transitions, markers</td><td>NLE compositions</td></tr>
+      <tr><td class="type-name">font</td><td>Typeface data</td><td>TTF, OTF, WOFF, WOFF2</td></tr>
+      <tr><td class="type-name">vector</td><td>Paths, shapes, gradients, filters, animation</td><td>SVG</td></tr>
+
+      <tr class="category-header"><td colspan="3">3D &amp; Scene</td></tr>
+      <tr><td class="type-name">scene</td><td>Full scene graph: prims, hierarchy, up-axis, meters/unit, variants, references</td><td>USD, USDA, USDC, USDZ, glTF, GLB, OBJ, FBX</td></tr>
+      <tr><td class="type-name">geometry</td><td>Mesh/curve/points: topology, normals, UVs, tangents, blend shapes, AABB</td><td>Mesh data</td></tr>
+      <tr><td class="type-name">material</td><td>PBR metallic-rough, spec-gloss, phong, unlit, spectral. IOR, transmission, emission</td><td>Material definitions</td></tr>
+
+      <tr class="category-header"><td colspan="3">Game Development</td></tr>
+      <tr><td class="type-name">texture</td><td>GPU textures: BC/ASTC/ETC2 compression, cubemaps, arrays, mip chains, sampler config</td><td>DDS, KTX, KTX2, PVR, Basis</td></tr>
+      <tr><td class="type-name">sprite</td><td>Sprite sheet/atlas: grid or packed rects, animated frames</td><td>Texture atlas</td></tr>
+      <tr><td class="type-name">skeleton</td><td>Bone hierarchy + bind pose</td><td>Skeletal rigs</td></tr>
+      <tr><td class="type-name">animation</td><td>Keyframes: skeletal, morph, transform, sprite, events. Loop/interpolation modes</td><td>Animation clips</td></tr>
+      <tr><td class="type-name">shader</td><td>GPU shaders in any language, all stages including ray tracing</td><td>SPIRV, MSL, HLSL, GLSL, WGSL</td></tr>
+      <tr><td class="type-name">tilemap</td><td>2D tile maps: ortho/iso/hex, layers, objects, infinite chunked</td><td>Tiled TMX/TMJ</td></tr>
+      <tr><td class="type-name">particle</td><td>Particle systems: emitter shape, lifetime, gravity, blend, animated textures</td><td>VFX definitions</td></tr>
+      <tr><td class="type-name">level</td><td>World layout: entities, spawns, triggers, light probes, streaming chunks</td><td>Game maps</td></tr>
+      <tr><td class="type-name">physics</td><td>Collision shapes + rigid body config, groups/masks, triggers, kinematics</td><td>Physics assets</td></tr>
+      <tr><td class="type-name">navmesh</td><td>Navigation mesh: agent size, slope, step height</td><td>AI pathfinding</td></tr>
+      <tr><td class="type-name">voxel</td><td>Voxel grid: dense or sparse SVO, palette mode, multi-channel</td><td>MagicaVoxel .vox</td></tr>
+      <tr><td class="type-name">terrain</td><td>Heightmap: splat maps, vegetation layers, terrain holes</td><td>Terrain data</td></tr>
+      <tr><td class="type-name">dialogue</td><td>Dialogue trees + localization: nodes, choices, multi-language</td><td>Narrative data</td></tr>
+      <tr><td class="type-name">prefab</td><td>Entity prefabs: component bundles, nesting, variant overrides</td><td>ECS instances</td></tr>
+
+      <tr class="category-header"><td colspan="3">Office &amp; Productivity</td></tr>
+      <tr><td class="type-name">spreadsheet</td><td>Sheets, formulas, pivot tables, named ranges, macros</td><td>XLSX, CSV, ODS, Numbers</td></tr>
+      <tr><td class="type-name">presentation</td><td>Slide decks: masters, layouts, transitions, speaker notes</td><td>PPTX, ODP, Keynote</td></tr>
+      <tr><td class="type-name">richtext</td><td>Styled documents: sections, TOC, track changes, headers/footers</td><td>DOCX, ODT, RTF, Pages</td></tr>
+      <tr><td class="type-name">document</td><td>Plain/markdown/HTML/PDF</td><td>PDF, MD, TXT, HTML</td></tr>
+      <tr><td class="type-name">database</td><td>Tables, indexes, views, relations, triggers</td><td>SQLite, .db</td></tr>
+      <tr><td class="type-name">chart</td><td>Bar, line, pie, scatter, heatmap, Gantt, candlestick, Sankey...</td><td>Data visualization</td></tr>
+      <tr><td class="type-name">diagram</td><td>Flowchart, org chart, UML, sequence, ER, mind map, wireframe</td><td>Vector diagrams</td></tr>
+      <tr><td class="type-name">notebook</td><td>Code + output cells with kernel/language info</td><td>Jupyter .ipynb</td></tr>
+      <tr><td class="type-name">calendar</td><td>Events, recurrences, reminders, attendees, locations</td><td>iCal .ics</td></tr>
+      <tr><td class="type-name">contacts</td><td>Address book: phones, emails, addresses, photos</td><td>vCard .vcf</td></tr>
+      <tr><td class="type-name">email</td><td>Message headers, body, attachments, S/MIME signatures</td><td>.eml, .msg</td></tr>
+      <tr><td class="type-name">form</td><td>Input fields, validation rules, conditional logic, scoring</td><td>Form templates</td></tr>
+
+      <tr class="category-header"><td colspan="3">ML &amp; Data</td></tr>
+      <tr><td class="type-name">model</td><td>Framework, op count, parameters, quantization, I/O shapes</td><td>ONNX, CoreML, TFLite, PyTorch</td></tr>
+      <tr><td class="type-name">stream</td><td>Real-time data descriptor</td><td>Live data</td></tr>
+      <tr><td class="type-name">archive</td><td>File collection with role-based access</td><td>Depo ARCV</td></tr>
+      <tr><td class="type-name">custom</td><td>User-defined type identifier + version + data</td><td>Anything</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- SDK -->
+<section id="sdk">
+  <div class="section-label">Developer</div>
+  <h2>Dynamic module SDK.</h2>
+  <p class="subtitle">Write a codec module, drop it in a folder, and it's loaded at runtime. No recompilation. No forking.</p>
+
+  <div class="two-col">
+    <div>
+      <h3 style="margin-bottom:12px">Write a module</h3>
+      <div class="code-block"><code>// my_codec.c  &rarr;  my_codec.dylib
+
+#include &lt;cutecontainer/sdk.h&gt;
+
+static int my_probe(const uint8_t *h, size_t l) {
+    return l >= 4 && memcmp(h, "MYCC", 4) == 0;
+}
+
+static int my_encode(const uint8_t *in, size_t n,
+    uint8_t **out, size_t *len,
+    const cc_opt *opts) {
+    // your codec here
+}
+
+const cc_module *cc_module_init(void) {
+    static const cc_module m = {
+        .name = "my-codec",
+        .type = CC_TYPE_CUSTOM,
+        .sdk_version = CC_SDK_VERSION,
+        .caps = CC_CAP_ENCODE | CC_CAP_DECODE,
+        .probe = my_probe,
+        .encode = my_encode,
+        .decode = my_decode,
+        .free_buf = free,
+    };
+    return &amp;m;
+}</code></div>
+    </div>
+    <div>
+      <h3 style="margin-bottom:12px">Module search paths</h3>
+      <div class="code-block"><code>~/.cutecontainer/modules/
+/usr/local/lib/cutecontainer/modules/
+/Library/Application Support/
+    cutecontainer/modules/</code></div>
+      <h3 style="margin-top:32px;margin-bottom:12px">CLI</h3>
+      <div class="code-block"><code>$ cutecontainer modules
+loaded modules (4):
+  press  caps=0x0013  rANS + LZ
+  crypt  caps=0x0013  Kyber + AES-256
+  film   caps=0x003b  Spectral codec
+  depo   caps=0x0013  Encrypted containers
+
+$ cutecontainer compress file.txt
+file.txt &rarr; file.txt.cute (12.3% ratio)
+
+$ cutecontainer info file.cute
+type:   raw
+format: unified container v5
+layers: compressed</code></div>
+    </div>
+  </div>
+</section>
+
+<!-- Platform -->
+<section id="platform">
+  <div class="section-label">Cross-Platform</div>
+  <h2>Runs everywhere.<br>Accelerated everywhere.</h2>
+  <p class="subtitle">One API with automatic backend selection. The compute abstraction probes for the best available hardware at runtime and dispatches accordingly.</p>
+
+  <div style="overflow-x:auto;margin-bottom:48px">
+    <table class="wrap-table" style="min-width:640px">
+      <thead>
+        <tr><th>Capability</th><th>macOS (Apple Silicon)</th><th>macOS (Intel)</th><th>Linux</th><th>Windows</th></tr>
+      </thead>
+      <tbody>
+        <tr><td style="font-weight:600">CPU codecs</td><td>aarch64 ASM</td><td>x86_64 ASM</td><td>x86_64 ASM</td><td>x86_64 ASM</td></tr>
+        <tr><td style="font-weight:600">AES acceleration</td><td>AESE/AESMC (ARM crypto)</td><td>AES-NI</td><td>AES-NI</td><td>AES-NI</td></tr>
+        <tr><td style="font-weight:600">SIMD</td><td>NEON</td><td>SSE2 / AVX2 / AVX-512</td><td>SSE2 / AVX2 / AVX-512</td><td>SSE2 / AVX2 / AVX-512</td></tr>
+        <tr><td style="font-weight:600">GPU compute</td><td>Metal + OpenCL</td><td>Metal + OpenCL</td><td>OpenCL</td><td>OpenCL</td></tr>
+        <tr><td style="font-weight:600">Spectral &rarr; RGB</td><td>Metal / OpenCL</td><td>Metal / OpenCL</td><td>OpenCL</td><td>OpenCL</td></tr>
+        <tr><td style="font-weight:600">Film develop</td><td>Metal / OpenCL</td><td>Metal / OpenCL</td><td>OpenCL</td><td>OpenCL</td></tr>
+        <tr><td style="font-weight:600">ProRes encode</td><td>Media engine (HW)</td><td>VideoToolbox (SW)</td><td>&mdash;</td><td>&mdash;</td></tr>
+        <tr><td style="font-weight:600">ProRes decode</td><td>Media engine (HW)</td><td>VideoToolbox (SW)</td><td>&mdash;</td><td>&mdash;</td></tr>
+        <tr><td style="font-weight:600">HW video encode</td><td>Media engine</td><td>VideoToolbox</td><td>NVENC / QSV / AMF</td><td>NVENC / QSV / AMF</td></tr>
+        <tr><td style="font-weight:600">NVMe direct I/O</td><td>NVMe (M1+)</td><td>NVMe</td><td>NVMe + io_uring</td><td>NVMe</td></tr>
+        <tr><td style="font-weight:600">NVMe extensions</td><td>&mdash;</td><td>&mdash;</td><td>CMB, ZNS, KV, CS</td><td>CMB, KV</td></tr>
+        <tr><td style="font-weight:600">Crypto HW</td><td>AESE + SHA3 + PMULL</td><td>AES-NI + SHA-NI</td><td>AES-NI + SHA-NI</td><td>AES-NI + SHA-NI</td></tr>
+        <tr><td style="font-weight:600">CUDA interop</td><td>&mdash;</td><td>&mdash;</td><td>GPUDirect Storage</td><td>GPUDirect Storage</td></tr>
+        <tr><td style="font-weight:600">Dynamic modules</td><td>.dylib</td><td>.dylib</td><td>.so</td><td>.dll</td></tr>
+        <tr><td style="font-weight:600">GUI app</td><td>Native Cocoa</td><td>Native Cocoa</td><td>&mdash;</td><td>&mdash;</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section-label" style="margin-top:64px">Compute</div>
+  <h2>One API. Best backend.</h2>
+  <p class="subtitle">The compute abstraction probes at runtime: Metal &rarr; OpenCL &rarr; CPU. Kernels are written in both MSL and OpenCL C. Same results, any GPU.</p>
+
+  <div class="pipeline" style="margin-bottom:48px">
+    <div class="pipeline-step" style="border-color:var(--accent)">
+      <div class="step-label" style="color:var(--accent)">cc_compute_create()</div>
+      <div class="step-detail">auto-detect best backend</div>
+    </div>
+    <div class="pipeline-arrow">&rarr;</div>
+    <div class="pipeline-step">
+      <div class="step-icon" style="font-size:16px">Metal</div>
+      <div class="step-detail">macOS / iOS</div>
+    </div>
+    <div class="pipeline-step">
+      <div class="step-icon" style="font-size:16px">OpenCL</div>
+      <div class="step-detail">macOS / Linux / Windows</div>
+    </div>
+    <div class="pipeline-step">
+      <div class="step-icon" style="font-size:16px">CPU</div>
+      <div class="step-detail">always available</div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div>
+      <h3 style="margin-bottom:12px">Runtime probing</h3>
+      <div class="code-block"><code>uint32_t caps = cc_compute_probe();
+
+if (caps &amp; CC_PLATFORM_HAS_METAL)
+    printf("Metal GPU available\n");
+if (caps &amp; CC_PLATFORM_HAS_OPENCL)
+    printf("OpenCL GPU available\n");
+if (caps &amp; CC_PLATFORM_HAS_AVX2)
+    printf("AVX2 SIMD available\n");
+if (caps &amp; CC_PLATFORM_HAS_AVX512)
+    printf("AVX-512 SIMD available\n");
+if (caps &amp; CC_PLATFORM_HAS_NEON)
+    printf("NEON SIMD available\n");
+if (caps &amp; CC_PLATFORM_HAS_AES_NI)
+    printf("AES-NI hardware crypto\n");
+if (caps &amp; CC_PLATFORM_HAS_PRORES_HW)
+    printf("ProRes media engine\n");</code></div>
+    </div>
+    <div>
+      <h3 style="margin-bottom:12px">Dispatch a kernel</h3>
+      <div class="code-block"><code>// same API for Metal, OpenCL, or CPU
+cc_compute_ctx *gpu = cc_compute_create();
+
+cc_compute_buf *in  = cc_compute_buf_create_from(
+    gpu, spectral_data, data_size);
+cc_compute_buf *out = cc_compute_buf_create(
+    gpu, rgba_size);
+
+cc_compute_kernel *k = cc_compute_kernel_compile(
+    gpu, kernel_source, "spectral_to_rgba");
+
+cc_compute_kernel_set_buf(k, 0, in);
+cc_compute_kernel_set_buf(k, 1, out);
+cc_compute_dispatch(k, pixel_count);
+cc_compute_finish(gpu);
+
+cc_compute_buf_download(out, rgba, rgba_size);</code></div>
+    </div>
+  </div>
+</section>
+
+<!-- NVMe -->
+<section>
+  <div class="section-label">Storage</div>
+  <h2>NVMe native.</h2>
+  <p class="subtitle">When NVMe devices are present, cutecontainer can bypass the filesystem entirely. Direct I/O, computational storage offload, and content-addressable key-value stores — all through standard NVMe commands.</p>
+
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-icon">DIO</div>
+      <h3>Direct I/O</h3>
+      <p>Bypass the filesystem for large containers. Aligned reads/writes directly to the NVMe namespace. No page cache overhead, no VFS latency.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">CMB</div>
+      <h3>Controller Memory Buffer</h3>
+      <p>Zero-copy GPU&harr;storage via NVMe CMB. On Linux with GPUDirect Storage, data flows directly from SSD to GPU VRAM without touching system RAM.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">CS</div>
+      <h3>Computational Storage</h3>
+      <p>Offload compression and SHA3 hashing to the SSD controller. Data is processed in-place on the drive — never crosses the PCIe bus. <code style="font-size:11px">cc_nvme_compress()</code> and <code style="font-size:11px">cc_nvme_hash()</code>.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">KV</div>
+      <h3>Key-Value Commands</h3>
+      <p>Content-addressable container store using NVMe KV. Key = SHA3-256 hash, Value = container. Instant deduplication. <code style="font-size:11px">cc_nvme_kv_put/get/exists/delete</code>.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">ZNS</div>
+      <h3>Zoned Namespaces</h3>
+      <p>Append-optimized writes for the depo ledger and WAL. Sequential zones eliminate write amplification on QLC/PLC NAND.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">RT</div>
+      <h3>Runtime detection</h3>
+      <p><code style="font-size:11px">cc_nvme_probe()</code> discovers NVMe devices and their capabilities at runtime. Graceful fallback to standard file I/O when NVMe extensions aren't available.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Performance -->
+<section>
+  <div class="section-label">Performance</div>
+  <h2>Hardware all the way down.</h2>
+  <p class="subtitle">Hand-written assembly for the hot paths. GPU compute for spectral processing. Apple media engine for ProRes. No generic library calls where silicon can do the work.</p>
+
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-icon">ASM</div>
+      <h3>aarch64 + x86_64</h3>
+      <p>rANS encode/decode, LZ match finding, AES-256 rounds (AESE/AES-NI), Kyber NTT, Curve25519 field ops, CuteHash ARX, spectral delta/deinterleave. 22 hand-written assembly files.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">GPU</div>
+      <h3>Metal + OpenCL</h3>
+      <p>Spectral-to-RGB via CIE 1931 integration. Fused film fold+develop kernel. Both MSL and OpenCL C implementations — same results on any GPU vendor.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">HW</div>
+      <h3>Media engine</h3>
+      <p>ProRes encode/decode through Apple Silicon's dedicated hardware block. VTCompressionSession with explicit hardware request. Zero-copy IOSurface from Metal.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">PQ</div>
+      <h3>Post-quantum</h3>
+      <p>ML-KEM-768 (Kyber) key encapsulation. 128-bit security even against quantum computers. SHAKE-256 KDF. Constant-time throughout.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">x86</div>
+      <h3>SIMD detection</h3>
+      <p>Runtime CPUID probing for AVX2, AVX-512, and AES-NI. The library adapts to whatever your CPU supports — no compile-time flags needed.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">0</div>
+      <h3>Zero dependencies</h3>
+      <p>Pure C11. No external libraries. OpenCL and Metal are optional — the library always works with CPU fallback. Cross-compile for any target.</p>
+    </div>
+  </div>
+</section>
+
+<!-- WAL -->
+<section>
+  <div class="section-label">WAL Rail</div>
+  <h2>1,228x faster reads.</h2>
+  <p class="subtitle">A cleartext append-only index at the end of every container. Answer any question about the file without touching the payload. No decrypt. No decompress.</p>
+
+  <div class="two-col">
+    <div>
+      <h3 style="margin-bottom:12px">O(1) queries</h3>
+      <div class="code-block"><code>cc_wal *w = cc_wal_open(data, len);
+
+// all answered from the summary — no payload I/O
+cc_content_type t = cc_wal_content_type(w);  // 3.6 ns
+uint64_t sz = cc_wal_original_size(w);       // 3.6 ns
+uint16_t lf = cc_wal_layer_flags(w);         // 3.6 ns
+
+// vs full container open: 712 us (decompress)
+// speedup: 1,228x</code></div>
+    </div>
+    <div>
+      <h3 style="margin-bottom:12px">On-disk layout</h3>
+      <div class="code-block"><code>[container header + meta + payload]
+[WAL trailer]:
+  "WALR" magic + size + entry_count
+  N &times; 128-byte entries (fixed, O(1) access)
+  64-byte summary (latest state)
+  "WALR" + size (footer for backward scan)
+
+344 bytes for 2 entries
+128 bytes per additional entry
+SHA3-256 hash chain for tamper detection</code></div>
+    </div>
+  </div>
+</section>
+
+<!-- Volume -->
+<section>
+  <div class="section-label">Volumes</div>
+  <h2>Game asset volumes.</h2>
+  <p class="subtitle">Pack thousands of assets into a single .cute file. Mount reads only the manifest + WAL. Individual assets decompress on demand. A writable overlay stores saves, config, and mods.</p>
+
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-icon">&#x1F4E6;</div>
+      <h3>Build</h3>
+      <p>Add files with per-asset compression, wrap types, and group IDs. The builder writes the manifest + payload + WAL in one pass.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">&#x1F50D;</div>
+      <h3>Mount &amp; query</h3>
+      <p>Mount reads manifest only. Find assets by path, prefix, group, or wrap type — all in-memory, no I/O.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">&#x1F3AE;</div>
+      <h3>Overlay</h3>
+      <p>Writable user data alongside the read-only volume. Saves, config overrides, and mods go to the overlay. Original assets are never modified.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">&#x1F680;</div>
+      <h3>Exec</h3>
+      <p>Volumes can be executable. The master declares entry points per platform. Launch extracts to a sandbox and injects $CUTE_VOLUME, $CUTE_SAVES, $CUTE_MODS.</p>
+    </div>
+  </div>
+
+  <div class="code-block" style="margin-top:32px"><code>// build
+cc_vol_builder *b = cc_vol_builder_create("game.cute");
+cc_vol_builder_add_file(b, "textures/hero.png", "art/hero.png", CC_VOL_COMPRESS);
+cc_vol_builder_add_entry_point(b, CC_PLAT_ANY, CC_INTERP_LUA, "scripts/main.lua", "", CC_EXEC_SANDBOX);
+cc_vol_builder_finish(b);
+
+// mount + load
+cc_volume *vol = cc_vol_mount("game.cute");
+void *tex = cc_vol_load(vol, "textures/hero.png", &amp;len);
+
+// overlay (user data)
+cc_vol_write_overlay(vol, "saves/slot1.sav", save_data, save_len);
+void *cfg = cc_vol_load_overlay(vol, "config.json", &amp;len);
+
+// launch
+cc_vol_exec(vol);</code></div>
+</section>
+
+<!-- Archive -->
+<section>
+  <div class="section-label">Archive Manager</div>
+  <h2>Every format. One API.</h2>
+  <p class="subtitle">Read and write .cute, .zip, .tar, .7z. Browse contents, extract individual files, convert between formats. Build self-extracting executables for any platform.</p>
+
+  <div style="overflow-x:auto">
+    <table class="wrap-table">
+      <thead><tr><th>Format</th><th>Read</th><th>Write</th><th>Features</th></tr></thead>
+      <tbody>
+        <tr><td class="type-name">.cute</td><td>Yes</td><td>Yes</td><td>Full cutecontainer features (WAL, encryption, spectral, volumes)</td></tr>
+        <tr><td class="type-name">.zip</td><td>Yes</td><td>Yes</td><td>PKZIP / ZIP64, deflate</td></tr>
+        <tr><td class="type-name">.tar</td><td>Yes</td><td>Yes</td><td>POSIX tar, .tar.gz, .tar.bz2, .tar.xz</td></tr>
+        <tr><td class="type-name">.7z</td><td>Yes</td><td>Yes</td><td>LZMA/LZMA2</td></tr>
+        <tr><td class="type-name">.rar</td><td>Yes</td><td>No</td><td>Read-only</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 style="margin-top:48px;margin-bottom:12px">Self-extracting executables</h3>
+  <div class="card-grid" style="grid-template-columns: repeat(4, 1fr)">
+    <div class="card" style="text-align:center;padding:20px">
+      <div style="font-family:monospace;font-size:14px;font-weight:700;color:var(--accent)">.exe</div>
+      <p>Windows PE</p>
+    </div>
+    <div class="card" style="text-align:center;padding:20px">
+      <div style="font-family:monospace;font-size:14px;font-weight:700;color:var(--accent)">.app</div>
+      <p>macOS bundle</p>
+    </div>
+    <div class="card" style="text-align:center;padding:20px">
+      <div style="font-family:monospace;font-size:14px;font-weight:700;color:var(--accent)">ELF</div>
+      <p>Linux binary</p>
+    </div>
+    <div class="card" style="text-align:center;padding:20px">
+      <div style="font-family:monospace;font-size:14px;font-weight:700;color:var(--accent)">#!/bin/sh</div>
+      <p>Shell script</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  cutecontainer &mdash; unified .cute toolchain
+</footer>
+
+<script>
+// Fade-in on scroll
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) e.target.classList.add('visible');
+  });
+}, { threshold: 0.1 });
+
+document.querySelectorAll('section, .card, .module-row, .pipeline-step').forEach(el => {
+  el.classList.add('fade-in');
+  observer.observe(el);
+});
+</script>
+
+</body>
+</html>
