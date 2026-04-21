@@ -1,0 +1,109 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,  target: linux-x86_64,   ext: tar.gz }
+          - { os: ubuntu-latest,  target: linux-i686,     ext: tar.gz, m32: true }
+          - { os: windows-latest, target: windows-x86_64, ext: zip,    cmake_arch: x64 }
+          - { os: windows-latest, target: windows-i686,   ext: zip,    cmake_arch: Win32 }
+          - { os: macos-13,       target: macos-x86_64,   ext: tar.gz }
+          - { os: macos-14,       target: macos-arm64,    ext: tar.gz }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install OpenCL dev (Linux x86_64)
+        if: matrix.target == 'linux-x86_64'
+        run: sudo apt-get update && sudo apt-get install -y ocl-icd-opencl-dev
+
+      - name: Install gcc-multilib (Linux i686)
+        if: matrix.m32 == true
+        run: sudo apt-get update && sudo apt-get install -y gcc-multilib
+
+      - name: Configure (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          if [ "${{ matrix.m32 }}" = "true" ]; then
+            cmake -B build -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_C_FLAGS=-m32 -DCMAKE_EXE_LINKER_FLAGS=-m32 -DCMAKE_SHARED_LINKER_FLAGS=-m32 \
+              -DCMAKE_DISABLE_FIND_PACKAGE_OpenCL=TRUE
+          else
+            cmake -B build -DCMAKE_BUILD_TYPE=Release
+          fi
+
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        run: cmake -B build -A ${{ matrix.cmake_arch }} -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release -j
+
+      - name: Stage artifacts
+        shell: bash
+        run: |
+          set -e
+          NAME="cutecontainer-${{ github.ref_name }}-${{ matrix.target }}"
+          mkdir -p "dist/$NAME/lib" "dist/$NAME/bin" "dist/$NAME/include"
+
+          # Library: build/libcutecontainer.* (Unix) or build/Release/cutecontainer.* (Windows MSVC multi-config)
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            find build -name 'cutecontainer.lib' -o -name 'cutecontainer*.dll' | xargs -I{} cp {} "dist/$NAME/lib/" 2>/dev/null || true
+            find build -name 'cutecontainer-cli.exe' -o -name 'cutecontainer.exe' | head -1 | xargs -I{} cp {} "dist/$NAME/bin/" 2>/dev/null || true
+          else
+            find build -maxdepth 2 -name 'libcutecontainer.*' | xargs -I{} cp {} "dist/$NAME/lib/" 2>/dev/null || true
+            for bin in cutecontainer-cli cutecontainer; do
+              if [ -f "build/$bin" ]; then cp "build/$bin" "dist/$NAME/bin/"; fi
+            done
+          fi
+
+          cp -R include/cutecontainer "dist/$NAME/include/"
+          cp LICENSE LICENSE.md "dist/$NAME/"
+          if [ -f README.md ]; then cp README.md "dist/$NAME/"; fi
+          if [ -f README-1.md ]; then cp README-1.md "dist/$NAME/README.md"; fi
+
+      - name: Package (tar.gz)
+        if: matrix.ext == 'tar.gz'
+        shell: bash
+        run: |
+          cd dist && tar czf "../cutecontainer-${{ github.ref_name }}-${{ matrix.target }}.tar.gz" "cutecontainer-${{ github.ref_name }}-${{ matrix.target }}"
+
+      - name: Package (zip)
+        if: matrix.ext == 'zip'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "dist/cutecontainer-${{ github.ref_name }}-${{ matrix.target }}" -DestinationPath "cutecontainer-${{ github.ref_name }}-${{ matrix.target }}.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: cutecontainer-${{ github.ref_name }}-${{ matrix.target }}.*
+
+  release:
+    name: publish release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/cutecontainer-*
+          draft: false
+          generate_release_notes: true
