@@ -468,9 +468,11 @@ static int cmd_archive_create(int argc, char **argv)
     cc_archive_writer *w = cc_archive_create(out, fmt);
     if (!w) {
         fprintf(stderr,
-            "error: archive create not yet implemented in libcutecontainer\n"
-            "       (cc_archive_create / depo_archive_encrypt are stubs).\n"
-            "       Reading side (detect/list/extract) is fully functional.\n");
+            "error: archive create for format '%s' is not yet implemented.\n"
+            "       Currently supported for create: zip (STORED / no compression).\n"
+            "       Reading side (detect/list/extract) supports zip / tar / tar.gz /\n"
+            "       tar.bz2 / tar.xz / 7z / rar.\n",
+            cc_archive_format_name(fmt));
         return 2;
     }
     int added = 0;

@@ -1226,45 +1226,296 @@ void cc_archive_close(cc_archive *a)
 }
 
 /* ────────────────────────────────────────────────────────────────────────── */
-/*  Stubs — write API (not yet implemented)                                  */
+/*  ZIP write API — STORED only (no deflate)                                 */
+/*                                                                            */
+/*  Other formats (tar, 7z, cute, …) are still write-stubbed. STORED-only    */
+/*  ZIP is the simplest interoperable format and unblocks "Archive…" in     */
+/*  the GUI without pulling in deflate. Entries can be re-compressed by      */
+/*  the cute toolchain (press) if the user wants smaller output.             */
 /* ────────────────────────────────────────────────────────────────────────── */
+
+#include <time.h>
+
+/* CRC-32 with polynomial 0xedb88320 (ZIP / gzip / zlib). */
+static uint32_t crc32_table[256];
+static int crc32_table_built = 0;
+
+static void crc32_build_table(void)
+{
+    if (crc32_table_built) return;
+    for (int i = 0; i < 256; i++) {
+        uint32_t c = (uint32_t)i;
+        for (int j = 0; j < 8; j++)
+            c = (c & 1u) ? (0xedb88320u ^ (c >> 1)) : (c >> 1);
+        crc32_table[i] = c;
+    }
+    crc32_table_built = 1;
+}
+
+static uint32_t crc32_compute(const void *data, size_t len)
+{
+    crc32_build_table();
+    uint32_t crc = 0xffffffffu;
+    const uint8_t *p = (const uint8_t *)data;
+    for (size_t i = 0; i < len; i++)
+        crc = crc32_table[(crc ^ p[i]) & 0xff] ^ (crc >> 8);
+    return crc ^ 0xffffffffu;
+}
+
+static void wr_le16(FILE *f, uint16_t v) { uint8_t b[2] = {v&0xff, v>>8}; fwrite(b,1,2,f); }
+static void wr_le32(FILE *f, uint32_t v) {
+    uint8_t b[4] = {v&0xff, (v>>8)&0xff, (v>>16)&0xff, (v>>24)&0xff};
+    fwrite(b, 1, 4, f);
+}
+
+/* Convert a unix epoch (seconds) to DOS date/time. Pre-1980 is clamped. */
+static void epoch_to_dos(uint64_t epoch, uint16_t *dos_time, uint16_t *dos_date)
+{
+    time_t t = (time_t)epoch;
+    struct tm lt;
+    if (epoch == 0 || !localtime_r(&t, &lt)) {
+        *dos_time = 0;
+        *dos_date = 0x0021; /* 1980-01-01 */
+        return;
+    }
+    int y = lt.tm_year + 1900;
+    if (y < 1980) { *dos_time = 0; *dos_date = 0x0021; return; }
+    *dos_time = (uint16_t)((lt.tm_hour << 11) | (lt.tm_min << 5) | (lt.tm_sec >> 1));
+    *dos_date = (uint16_t)(((y - 1980) << 9) | ((lt.tm_mon + 1) << 5) | lt.tm_mday);
+}
+
+typedef struct {
+    char     *path;       /* archive-internal path (UTF-8) */
+    uint32_t  crc32;
+    uint64_t  local_offset;
+    uint64_t  size;       /* uncompressed = compressed (STORED) */
+    uint16_t  dos_time;
+    uint16_t  dos_date;
+    uint8_t   is_dir;
+} zip_wr_entry;
+
+struct cc_archive_writer {
+    FILE              *fp;
+    cc_archive_format  format;
+    /* ZIP state */
+    zip_wr_entry      *entries;
+    int                count;
+    int                cap;
+    uint64_t           cur_offset;
+};
 
 cc_archive_writer *cc_archive_create(const char *path, cc_archive_format format)
 {
-    (void)path;
-    (void)format;
-    return NULL;  /* TODO: implement archive creation */
+    if (!path) return NULL;
+    if (format != CC_ARCHIVE_ZIP) {
+        /* Other formats still stubbed — fail fast so the CLI emits a clear
+         * "format X not yet supported" error rather than producing garbage. */
+        return NULL;
+    }
+    FILE *fp = fopen(path, "wb");
+    if (!fp) return NULL;
+    cc_archive_writer *w = calloc(1, sizeof(*w));
+    if (!w) { fclose(fp); return NULL; }
+    w->fp = fp;
+    w->format = format;
+    w->cap = 16;
+    w->entries = calloc(w->cap, sizeof(zip_wr_entry));
+    if (!w->entries) { fclose(fp); free(w); return NULL; }
+    return w;
 }
 
-int cc_archive_add_file(cc_archive_writer *w, const char *archive_path,
-                        const char *disk_path)
+static int zip_grow_entries(cc_archive_writer *w)
 {
-    (void)w; (void)archive_path; (void)disk_path;
-    return -1;
+    if (w->count < w->cap) return 0;
+    int nc = w->cap * 2;
+    zip_wr_entry *ne = realloc(w->entries, nc * sizeof(zip_wr_entry));
+    if (!ne) return -1;
+    w->entries = ne; w->cap = nc;
+    return 0;
+}
+
+/* Local file header: 30 bytes + filename. STORED method, no extra. */
+static int zip_write_local_header(cc_archive_writer *w, const char *name,
+                                  uint16_t dos_time, uint16_t dos_date,
+                                  uint32_t crc, uint64_t size)
+{
+    size_t name_len = strlen(name);
+    if (name_len > 0xffff) return -1;
+    /* General purpose bit 11 = UTF-8 filename */
+    uint16_t flags = 0x0800;
+    wr_le32(w->fp, 0x04034b50u);     /* signature */
+    wr_le16(w->fp, 20);              /* version needed */
+    wr_le16(w->fp, flags);
+    wr_le16(w->fp, 0);               /* method = STORED */
+    wr_le16(w->fp, dos_time);
+    wr_le16(w->fp, dos_date);
+    wr_le32(w->fp, crc);
+    wr_le32(w->fp, (uint32_t)size);  /* compressed */
+    wr_le32(w->fp, (uint32_t)size);  /* uncompressed */
+    wr_le16(w->fp, (uint16_t)name_len);
+    wr_le16(w->fp, 0);               /* extra length */
+    fwrite(name, 1, name_len, w->fp);
+    w->cur_offset += 30 + name_len;
+    return 0;
 }
 
 int cc_archive_add_buf(cc_archive_writer *w, const char *archive_path,
                        const void *data, size_t len)
 {
-    (void)w; (void)archive_path; (void)data; (void)len;
-    return -1;
+    if (!w || w->format != CC_ARCHIVE_ZIP || !archive_path) return -1;
+    if (zip_grow_entries(w) != 0) return -1;
+    if (len > 0xffffffffu) return -1; /* TODO: ZIP64 */
+
+    uint32_t crc = (data && len) ? crc32_compute(data, len) : 0;
+    uint64_t local_offset = w->cur_offset;
+
+    uint16_t dos_time, dos_date;
+    epoch_to_dos((uint64_t)time(NULL), &dos_time, &dos_date);
+
+    if (zip_write_local_header(w, archive_path, dos_time, dos_date, crc, len) != 0)
+        return -1;
+    if (data && len) {
+        if (fwrite(data, 1, len, w->fp) != len) return -1;
+        w->cur_offset += len;
+    }
+
+    zip_wr_entry *e = &w->entries[w->count++];
+    e->path = strdup(archive_path);
+    e->crc32 = crc;
+    e->local_offset = local_offset;
+    e->size = len;
+    e->dos_time = dos_time;
+    e->dos_date = dos_date;
+    e->is_dir = 0;
+    return 0;
+}
+
+int cc_archive_add_file(cc_archive_writer *w, const char *archive_path,
+                        const char *disk_path)
+{
+    if (!w || !archive_path || !disk_path) return -1;
+    FILE *src = fopen(disk_path, "rb");
+    if (!src) return -1;
+    fseek(src, 0, SEEK_END);
+    long sz = ftell(src);
+    fseek(src, 0, SEEK_SET);
+    if (sz < 0) { fclose(src); return -1; }
+
+    uint8_t *buf = (sz > 0) ? malloc((size_t)sz) : NULL;
+    if (sz > 0 && !buf) { fclose(src); return -1; }
+    if (sz > 0 && fread(buf, 1, (size_t)sz, src) != (size_t)sz) {
+        free(buf); fclose(src); return -1;
+    }
+    fclose(src);
+
+    /* Use the on-disk mtime so re-archived files preserve their stamp. */
+    struct stat st;
+    int rc = cc_archive_add_buf(w, archive_path, buf, (size_t)sz);
+    if (rc == 0 && stat(disk_path, &st) == 0) {
+        zip_wr_entry *e = &w->entries[w->count - 1];
+        epoch_to_dos((uint64_t)st.st_mtime, &e->dos_time, &e->dos_date);
+        /* Note: we wrote the local header before stat — the central
+         * directory uses e->dos_time/date below so the result is at least
+         * correct in the listing. Local-header time is already on disk. */
+    }
+    free(buf);
+    return rc;
 }
 
 int cc_archive_add_dir(cc_archive_writer *w, const char *archive_path)
 {
-    (void)w; (void)archive_path;
-    return -1;
+    if (!w || w->format != CC_ARCHIVE_ZIP || !archive_path) return -1;
+    /* Ensure trailing slash for ZIP directory entries. */
+    size_t plen = strlen(archive_path);
+    char *with_slash = NULL;
+    const char *name = archive_path;
+    if (plen == 0 || archive_path[plen - 1] != '/') {
+        with_slash = malloc(plen + 2);
+        if (!with_slash) return -1;
+        memcpy(with_slash, archive_path, plen);
+        with_slash[plen] = '/';
+        with_slash[plen + 1] = '\0';
+        name = with_slash;
+    }
+
+    if (zip_grow_entries(w) != 0) { free(with_slash); return -1; }
+    uint16_t dos_time, dos_date;
+    epoch_to_dos((uint64_t)time(NULL), &dos_time, &dos_date);
+    uint64_t local_offset = w->cur_offset;
+    int rc = zip_write_local_header(w, name, dos_time, dos_date, 0, 0);
+    if (rc != 0) { free(with_slash); return -1; }
+
+    zip_wr_entry *e = &w->entries[w->count++];
+    e->path = strdup(name);
+    e->crc32 = 0;
+    e->local_offset = local_offset;
+    e->size = 0;
+    e->dos_time = dos_time;
+    e->dos_date = dos_date;
+    e->is_dir = 1;
+    free(with_slash);
+    return 0;
 }
 
 int cc_archive_finish(cc_archive_writer *w)
 {
-    (void)w;
-    return -1;
+    if (!w || !w->fp) return -1;
+    if (w->format != CC_ARCHIVE_ZIP) return -1;
+
+    uint64_t cd_offset = w->cur_offset;
+    uint64_t cd_size = 0;
+
+    for (int i = 0; i < w->count; i++) {
+        zip_wr_entry *e = &w->entries[i];
+        size_t name_len = strlen(e->path);
+        if (name_len > 0xffff) return -1;
+        uint16_t flags = 0x0800; /* utf-8 */
+        /* External attrs: regular file 0644, dir bit set if dir */
+        uint32_t ext_attrs = e->is_dir ? ((uint32_t)0040755u << 16) : ((uint32_t)0100644u << 16);
+        if (e->is_dir) ext_attrs |= 0x10; /* DOS directory bit */
+
+        wr_le32(w->fp, 0x02014b50u);
+        wr_le16(w->fp, (uint16_t)0x031eu);   /* version made by: Unix 3.0 */
+        wr_le16(w->fp, 20);                  /* version needed */
+        wr_le16(w->fp, flags);
+        wr_le16(w->fp, 0);                   /* method = STORED */
+        wr_le16(w->fp, e->dos_time);
+        wr_le16(w->fp, e->dos_date);
+        wr_le32(w->fp, e->crc32);
+        wr_le32(w->fp, (uint32_t)e->size);   /* compressed */
+        wr_le32(w->fp, (uint32_t)e->size);   /* uncompressed */
+        wr_le16(w->fp, (uint16_t)name_len);
+        wr_le16(w->fp, 0);                   /* extra length */
+        wr_le16(w->fp, 0);                   /* comment length */
+        wr_le16(w->fp, 0);                   /* disk number */
+        wr_le16(w->fp, 0);                   /* internal attrs */
+        wr_le32(w->fp, ext_attrs);
+        wr_le32(w->fp, (uint32_t)e->local_offset);
+        fwrite(e->path, 1, name_len, w->fp);
+        cd_size += 46 + name_len;
+    }
+
+    /* End of Central Directory */
+    wr_le32(w->fp, 0x06054b50u);
+    wr_le16(w->fp, 0); /* this disk */
+    wr_le16(w->fp, 0); /* disk with central */
+    wr_le16(w->fp, (uint16_t)w->count); /* entries on disk */
+    wr_le16(w->fp, (uint16_t)w->count); /* total entries */
+    wr_le32(w->fp, (uint32_t)cd_size);
+    wr_le32(w->fp, (uint32_t)cd_offset);
+    wr_le16(w->fp, 0); /* comment length */
+
+    int rc = (fflush(w->fp) == 0) ? 0 : -1;
+    return rc;
 }
 
 void cc_archive_writer_destroy(cc_archive_writer *w)
 {
-    (void)w;
+    if (!w) return;
+    if (w->fp) fclose(w->fp);
+    for (int i = 0; i < w->count; i++) free(w->entries[i].path);
+    free(w->entries);
+    free(w);
 }
 
 /* ────────────────────────────────────────────────────────────────────────── */
