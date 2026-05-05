@@ -337,15 +337,46 @@ static int cmd_lock(int argc, char **argv)
 {
     const char *password = NULL;
     const char *file = NULL;
+    uint32_t valid_epochs = 0;
+    uint32_t delay_epochs = 0;
+    uint16_t fuses = 0;
+    int      purge = 0;
+    int      keychain = 0;
+    const char *engrave_text = NULL;
+    int      engrave_role = 3; /* default: reader */
+    const char *public_msg = NULL;
+    const char *output = NULL;
 
     for (int i = 0; i < argc; i++) {
-        if (strcmp(argv[i], "-p") == 0 && i+1 < argc)
-            password = argv[++i];
-        else if (!file)
-            file = argv[i];
+        if (!strcmp(argv[i], "-p") && i + 1 < argc) password = argv[++i];
+        else if (!strcmp(argv[i], "-o") && i + 1 < argc) output = argv[++i];
+        else if (!strcmp(argv[i], "--fuses") && i + 1 < argc) fuses = (uint16_t)atoi(argv[++i]);
+        else if ((!strcmp(argv[i], "--timed") || !strcmp(argv[i], "--valid-epochs"))
+                 && i + 1 < argc) valid_epochs = (uint32_t)atoi(argv[++i]);
+        else if ((!strcmp(argv[i], "--delay") || !strcmp(argv[i], "--delay-epochs"))
+                 && i + 1 < argc) delay_epochs = (uint32_t)atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--purge")) purge = 1;
+        else if (!strcmp(argv[i], "--keychain")) keychain = 1;
+        else if (!strcmp(argv[i], "--engrave") && i + 1 < argc) engrave_text = argv[++i];
+        else if (!strcmp(argv[i], "--engrave-role") && i + 1 < argc) {
+            const char *r = argv[++i];
+            if (!strcmp(r, "root")) engrave_role = 0;
+            else if (!strcmp(r, "admin")) engrave_role = 1;
+            else if (!strcmp(r, "auditor")) engrave_role = 2;
+            else if (!strcmp(r, "reader")) engrave_role = 3;
+            else engrave_role = atoi(r);
+        }
+        else if (!strcmp(argv[i], "--public") && i + 1 < argc) public_msg = argv[++i];
+        else if (!file) file = argv[i];
     }
 
-    if (!file) { fprintf(stderr, "error: lock requires a file\n"); return 1; }
+    if (!file) {
+        fprintf(stderr,
+            "usage: lock -p <pw> [--fuses N] [--timed N] [--delay N] [--purge]\n"
+            "            [--keychain] [--engrave TEXT] [--engrave-role ROLE]\n"
+            "            [--public TEXT] [-o OUT] <file>\n");
+        return 1;
+    }
     if (!password) {
         fprintf(stderr, "password: ");
         static char pw[256];
@@ -355,11 +386,23 @@ static int cmd_lock(int argc, char **argv)
     }
 
     depo_opts opts = depo_opts_default();
-    opts.password = password;
-    opts.headless = 1;
+    opts.password     = password;
+    opts.headless     = 1;
+    opts.valid_epochs = valid_epochs;
+    opts.delay_epochs = delay_epochs;
+    opts.fuses        = fuses;
+    opts.purge        = purge;
+    opts.keychain     = keychain;
+    opts.engrave_text = engrave_text;
+    opts.engrave_role = (uint8_t)engrave_role;
+    opts.public_message = public_msg;
 
     char out_path[1024];
-    make_output_path(out_path, sizeof(out_path), file, ".cute");
+    if (output) {
+        snprintf(out_path, sizeof(out_path), "%s", output);
+    } else {
+        make_output_path(out_path, sizeof(out_path), file, ".cute");
+    }
 
     int rc = depo_encrypt_file(file, out_path, &opts);
     if (rc != 0) { fprintf(stderr, "error: lock failed (%d)\n", rc); return 1; }

@@ -6851,11 +6851,59 @@ int depo_info(const uint8_t *data, size_t len, char *buf, size_t cap) {
     return 0;
 }
 
+/* Translate the public depo_opts to the internal cli_opts that the
+ * full do_encrypt / do_decrypt / do_archive_* implementations consume.
+ * `headless` is forced on so the public API never tries to prompt. */
+static void depo_opts_to_cli(const depo_opts *o, cli_opts *c,
+                             const char *in, const char *out) {
+    memset(c, 0, sizeof(*c));
+    c->headless     = 1;
+    c->quiet        = !o->verbose;
+    c->password     = o->password;
+    c->valid_epochs = o->valid_epochs;
+    c->delay_secs   = o->delay_epochs * (o->epoch_len ? o->epoch_len : 3600);
+    c->fuses        = o->fuses;
+    c->epoch_len    = o->epoch_len;
+    c->kdf_rounds   = o->kdf_rounds;
+    c->purge        = o->purge;
+    c->keychain     = o->keychain;
+    c->fuse_server  = o->remote_url;
+    c->archive      = o->archive;
+    c->public_msg   = o->public_message;
+    c->engrave      = o->engrave_text;
+    c->engrave_level = o->engrave_role;
+    c->totp_secret  = o->totp_secret;
+    c->totp_code    = o->totp_code;
+    c->force        = o->force;
+    c->input        = in;
+    c->output       = out;
+}
+
+int depo_encrypt_file(const char *in_path, const char *out_path,
+                      const depo_opts *opts) {
+    if (!in_path) return -1;
+    depo_opts d = depo_opts_default();
+    if (opts) d = *opts;
+    cli_opts c; depo_opts_to_cli(&d, &c, in_path, out_path);
+    return do_encrypt(in_path, &c);
+}
+
+int depo_decrypt_file(const char *in_path, const char *out_path,
+                      const depo_opts *opts) {
+    if (!in_path) return -1;
+    depo_opts d = depo_opts_default();
+    if (opts) d = *opts;
+    cli_opts c; depo_opts_to_cli(&d, &c, in_path, out_path);
+    return do_decrypt(in_path, &c);
+}
+
 int depo_encrypt_buf(const uint8_t *in, size_t in_len,
                      uint8_t **out, size_t *out_len,
                      const depo_opts *opts) {
+    /* Buffer-mode encrypt isn't supported by the existing do_encrypt
+     * internals; they're file-path-driven. Surface that explicitly so
+     * callers don't get silent failure. */
     (void)in; (void)in_len; (void)out; (void)out_len; (void)opts;
-    /* TODO: wire to do_encrypt internals */
     return -1;
 }
 
@@ -6863,27 +6911,33 @@ int depo_decrypt_buf(const uint8_t *in, size_t in_len,
                      uint8_t **out, size_t *out_len,
                      const depo_opts *opts) {
     (void)in; (void)in_len; (void)out; (void)out_len; (void)opts;
-    /* TODO: wire to do_decrypt internals */
     return -1;
 }
 
-int depo_encrypt_file(const char *in_path, const char *out_path,
-                      const depo_opts *opts) {
-    (void)in_path; (void)out_path; (void)opts;
-    return -1;
+int depo_archive_encrypt(const char **paths, int count, const char *out_path,
+                         const depo_opts *opts) {
+    if (!paths || count <= 0 || !out_path) return -1;
+    depo_opts d = depo_opts_default();
+    if (opts) d = *opts;
+    cli_opts c; depo_opts_to_cli(&d, &c, NULL, out_path);
+    c.archive = 1;
+    /* do_archive_encrypt mutates the paths array via getopt; it expects
+     * char ** rather than const char **. Cast through. */
+    return do_archive_encrypt(count, (char **)(uintptr_t)paths, &c);
 }
 
-int depo_decrypt_file(const char *in_path, const char *out_path,
-                      const depo_opts *opts) {
-    (void)in_path; (void)out_path; (void)opts;
-    return -1;
-}
-
-int depo_archive_encrypt(const char **p, int c, const char *o, const depo_opts *opts) {
-    (void)p;(void)c;(void)o;(void)opts; return -1;
-}
-int depo_archive_decrypt(const char *i, const char *o, const depo_opts *opts) {
-    (void)i;(void)o;(void)opts; return -1;
+int depo_archive_decrypt(const char *in_path, const char *out_dir,
+                         const depo_opts *opts) {
+    if (!in_path || !out_dir) return -1;
+    depo_opts d = depo_opts_default();
+    if (opts) d = *opts;
+    size_t flen = 0;
+    uint8_t *data = read_file(in_path, &flen);
+    if (!data) return -1;
+    cli_opts c; depo_opts_to_cli(&d, &c, in_path, out_dir);
+    int rc = do_archive_decrypt(in_path, data, flen, NULL, &c);
+    free(data);
+    return rc;
 }
 int depo_archive_list(const char *p, char *b, size_t c) {
     (void)p;(void)b;(void)c; return -1;
