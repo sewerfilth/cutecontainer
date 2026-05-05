@@ -6827,26 +6827,52 @@ depo_opts depo_opts_default(void) {
 }
 
 int depo_info(const uint8_t *data, size_t len, char *buf, size_t cap) {
-    /* delegate to do_info logic - for now just show header */
     if (len < HDR_SIZE || memcmp(data, CUTE_MAGIC, 4) != 0) return -1;
-    uint8_t flags = data[HDR_FLAGS];
-    uint32_t vault_sz = le32_get(data + HDR_VAULT_SIZE);
+    uint8_t  flags     = data[HDR_FLAGS];
+    uint32_t vault_sz  = le32_get(data + HDR_VAULT_SIZE);
     uint32_t payload_sz = le32_get(data + HDR_PAYLOAD_SIZE);
-    uint16_t ledger_n = le16_get(data + HDR_LEDGER_COUNT);
+    uint16_t ledger_n  = le16_get(data + HDR_LEDGER_COUNT);
+    uint64_t created   = le64_get(data + HDR_CREATED);
+    uint32_t epoch_len = le32_get(data + HDR_EPOCH_LEN);
+    uint32_t valid_from = le32_get(data + HDR_VALID_FROM);
+    uint32_t valid_until = le32_get(data + HDR_VALID_UNTIL);
+    uint16_t max_fuses = le16_get(data + HDR_MAX_FUSES);
+    uint16_t fuses_rem = le16_get(data + HDR_FUSES_REM);
+    uint32_t kdf_rounds = le32_get(data + HDR_KDF_ROUNDS);
+
+    /* Each line is "key: value" — the cli's `info --json` walker turns the
+     * whole block into a parsed map for the GUI to render structured rows. */
     snprintf(buf, cap,
-        "format:    cutedepo v%d\n"
-        "flags:     0x%02x%s%s%s%s%s%s%s\n"
-        "vault:     %u bytes\n"
-        "payload:   %u bytes\n"
-        "ledger:    %u entries\n",
+        "format: cutedepo v%d\n"
+        "flags: 0x%02x\n"
+        "flag_timed: %d\n"
+        "flag_delayed: %d\n"
+        "flag_fused: %d\n"
+        "flag_purge: %d\n"
+        "flag_container: %d\n"
+        "flag_keychain: %d\n"
+        "flag_remote_fuse: %d\n"
+        "max_fuses: %u\n"
+        "fuses_remaining: %u\n"
+        "epoch_len_seconds: %u\n"
+        "valid_from_epoch: %u\n"
+        "valid_until_epoch: %u\n"
+        "kdf_rounds: %u\n"
+        "created_unix: %llu\n"
+        "vault_bytes: %u\n"
+        "payload_bytes: %u\n"
+        "ledger_entries: %u\n",
         data[HDR_VERSION], flags,
-        (flags & FLAG_TIMED) ? " TIMED" : "",
-        (flags & FLAG_DELAYED) ? " DELAYED" : "",
-        (flags & FLAG_FUSED) ? " FUSED" : "",
-        (flags & FLAG_PURGE) ? " PURGE" : "",
-        (flags & FLAG_CONTAINER) ? " CONTAINER" : "",
-        (flags & FLAG_KEYCHAIN) ? " KEYCHAIN" : "",
-        (flags & FLAG_REMOTE_FUSE) ? " REMOTE" : "",
+        (flags & FLAG_TIMED)       ? 1 : 0,
+        (flags & FLAG_DELAYED)     ? 1 : 0,
+        (flags & FLAG_FUSED)       ? 1 : 0,
+        (flags & FLAG_PURGE)       ? 1 : 0,
+        (flags & FLAG_CONTAINER)   ? 1 : 0,
+        (flags & FLAG_KEYCHAIN)    ? 1 : 0,
+        (flags & FLAG_REMOTE_FUSE) ? 1 : 0,
+        max_fuses, fuses_rem,
+        epoch_len, valid_from, valid_until, kdf_rounds,
+        (unsigned long long)created,
         vault_sz, payload_sz, ledger_n);
     return 0;
 }
