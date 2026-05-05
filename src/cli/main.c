@@ -33,6 +33,9 @@
 #include <string.h>
 #include <strings.h>
 
+/* ---- Forward decls (helpers shared across commands) ---- */
+static void json_print_string(FILE *f, const char *s);
+
 /* ---- Helpers ---- */
 
 static uint8_t *read_file(const char *path, size_t *len)
@@ -98,6 +101,112 @@ static int cmd_modules(void)
         printf("  %-8s  type=%d  caps=0x%04x  %s\n",
             mods[i]->name, mods[i]->type, mods[i]->caps, mods[i]->description);
     }
+    return 0;
+}
+
+static int cmd_info_json(const char *path)
+{
+    size_t len = 0;
+    uint8_t *data = read_file(path, &len);
+    if (!data) {
+        printf("{\"error\":\"cannot read file\"}\n");
+        return 1;
+    }
+    cc_content_type type = cc_container_detect(data, len);
+
+    printf("{\"type\":");
+    json_print_string(stdout, cc_content_type_name(type));
+    printf(",\"file_size\":%zu", len);
+
+    /* Unified container header — at least v5 layout (CUTE magic + 64-byte
+     * header). Extracts every field directly from the raw bytes so we
+     * don't have to re-open the container with potentially side-effecting
+     * decryption / decompression. */
+    if (len >= 64 && memcmp(data, "CUTE", 4) == 0 && data[4] >= 0x05) {
+        uint8_t  version = data[4];
+        uint8_t  ctype   = data[5];
+        uint16_t layers  = (uint16_t)(data[6] | (data[7] << 8));
+        uint64_t payload_sz = 0, orig_sz = 0;
+        uint32_t meta_sz = 0;
+        for (int i = 0; i < 8; i++) payload_sz |= ((uint64_t)data[8 + i]) << (i * 8);
+        for (int i = 0; i < 8; i++) orig_sz    |= ((uint64_t)data[16 + i]) << (i * 8);
+        for (int i = 0; i < 4; i++) meta_sz    |= ((uint32_t)data[24 + i]) << (i * 8);
+
+        printf(",\"container\":{");
+        printf("\"version\":%u,", (unsigned)version);
+        printf("\"type_code\":%u,", (unsigned)ctype);
+        printf("\"type_name\":");
+        json_print_string(stdout, cc_content_type_name((cc_content_type)ctype));
+        printf(",\"layers\":[");
+        int first = 1;
+        if (layers & CC_LAYER_COMPRESSED) { printf("\"compressed\""); first = 0; }
+        if (layers & CC_LAYER_ENCRYPTED)  { printf("%s\"encrypted\"", first ? "" : ","); }
+        printf("],");
+        printf("\"layer_flags\":%u,", (unsigned)layers);
+        printf("\"payload_size\":%llu,", (unsigned long long)payload_sz);
+        printf("\"original_size\":%llu,", (unsigned long long)orig_sz);
+        printf("\"meta_size\":%u,", (unsigned)meta_sz);
+        printf("\"hash\":\"");
+        for (int i = 0; i < 32; i++) printf("%02x", data[28 + i]);
+        printf("\"}");
+    }
+
+    /* Module-level info (press / depo / film / crypt). The module's info()
+     * writes "key: value" lines; we expose both the raw text and a parsed
+     * `fields` map so the GUI can render structured rows without having
+     * to hand-parse the text. */
+    const cc_module *mod = cc_probe_module(data, len);
+    if (mod) {
+        printf(",\"module\":{\"name\":");
+        json_print_string(stdout, mod->name);
+        printf(",\"caps\":%u,\"type\":%d", (unsigned)mod->caps, (int)mod->type);
+        if (mod->info) {
+            char info_buf[2048];
+            info_buf[0] = '\0';
+            mod->info(data, len, info_buf, sizeof(info_buf));
+            printf(",\"text\":");
+            json_print_string(stdout, info_buf);
+
+            /* Parse "key: value\n" lines into a JSON object. */
+            printf(",\"fields\":{");
+            int first_field = 1;
+            const char *p = info_buf;
+            while (*p) {
+                const char *eol = strchr(p, '\n');
+                if (!eol) eol = p + strlen(p);
+                const char *colon = NULL;
+                for (const char *q = p; q < eol; q++) {
+                    if (*q == ':') { colon = q; break; }
+                }
+                if (colon && colon > p) {
+                    int klen = (int)(colon - p);
+                    while (klen > 0 && (p[klen - 1] == ' ' || p[klen - 1] == '\t')) klen--;
+                    const char *vs = colon + 1;
+                    while (vs < eol && (*vs == ' ' || *vs == '\t')) vs++;
+                    int vlen = (int)(eol - vs);
+                    while (vlen > 0 && (vs[vlen - 1] == ' ' || vs[vlen - 1] == '\t')) vlen--;
+                    if (klen > 0 && vlen > 0) {
+                        char k[128], v[512];
+                        int kn = klen < (int)sizeof(k) - 1 ? klen : (int)sizeof(k) - 1;
+                        int vn = vlen < (int)sizeof(v) - 1 ? vlen : (int)sizeof(v) - 1;
+                        memcpy(k, p, kn); k[kn] = 0;
+                        memcpy(v, vs, vn); v[vn] = 0;
+                        if (!first_field) printf(",");
+                        json_print_string(stdout, k);
+                        printf(":");
+                        json_print_string(stdout, v);
+                        first_field = 0;
+                    }
+                }
+                if (*eol == '\n') p = eol + 1; else break;
+            }
+            printf("}");
+        }
+        printf("}");
+    }
+
+    printf("}\n");
+    free(data);
     return 0;
 }
 
@@ -534,8 +643,16 @@ int main(int argc, char **argv)
     if (strcmp(cmd, "modules") == 0)
         return cmd_modules();
 
-    if (strcmp(cmd, "info") == 0 && argc >= 3)
-        return cmd_info(argv[2]);
+    if (strcmp(cmd, "info") == 0 && argc >= 3) {
+        int json = 0;
+        const char *path = NULL;
+        for (int i = 2; i < argc; i++) {
+            if (!strcmp(argv[i], "--json")) json = 1;
+            else if (!path) path = argv[i];
+        }
+        if (!path) { usage(); return 1; }
+        return json ? cmd_info_json(path) : cmd_info(path);
+    }
 
     if (strcmp(cmd, "compress") == 0 && argc >= 3) {
         int level = CP_LEVEL_DEFAULT;
