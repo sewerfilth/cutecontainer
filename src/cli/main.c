@@ -26,10 +26,12 @@
 #include "cutecontainer/crypt.h"
 #include "cutecontainer/film.h"
 #include "cutecontainer/depo.h"
+#include "cutecontainer/archive.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 /* ---- Helpers ---- */
 
@@ -78,6 +80,12 @@ static void usage(void)
         "  cutecontainer info <file>                        show file info\n"
         "  cutecontainer modules                            list loaded modules\n"
         "  cutecontainer <file>                             auto-detect and process\n"
+        "\n"
+        "Multi-format archive (zip/tar/tar.gz/tar.bz2/tar.xz/7z/rar/cute):\n"
+        "  cutecontainer archive detect  <path>             print detected format\n"
+        "  cutecontainer archive list    <path>             JSON listing of entries\n"
+        "  cutecontainer archive extract <path> -o <dest> [-i <i>]\n"
+        "  cutecontainer archive create  [-f <fmt>] <out> <files...>\n"
     );
 }
 
@@ -293,6 +301,224 @@ static int cmd_unlock(int argc, char **argv)
     return 0;
 }
 
+/* ---- Archive (multi-format reader/writer over archive.h) ---- */
+
+static int ends_with_ci(const char *s, const char *suffix)
+{
+    size_t sl = strlen(s), tl = strlen(suffix);
+    if (tl > sl) return 0;
+    return strcasecmp(s + sl - tl, suffix) == 0;
+}
+
+static cc_archive_format format_from_path(const char *path)
+{
+    if (ends_with_ci(path, ".cute"))    return CC_ARCHIVE_CUTE;
+    if (ends_with_ci(path, ".zip"))     return CC_ARCHIVE_ZIP;
+    if (ends_with_ci(path, ".tar.gz"))  return CC_ARCHIVE_TAR_GZ;
+    if (ends_with_ci(path, ".tgz"))     return CC_ARCHIVE_TAR_GZ;
+    if (ends_with_ci(path, ".tar.bz2")) return CC_ARCHIVE_TAR_BZ2;
+    if (ends_with_ci(path, ".tbz2"))    return CC_ARCHIVE_TAR_BZ2;
+    if (ends_with_ci(path, ".tar.xz"))  return CC_ARCHIVE_TAR_XZ;
+    if (ends_with_ci(path, ".txz"))     return CC_ARCHIVE_TAR_XZ;
+    if (ends_with_ci(path, ".tar"))     return CC_ARCHIVE_TAR;
+    if (ends_with_ci(path, ".7z"))      return CC_ARCHIVE_SEVEN_Z;
+    if (ends_with_ci(path, ".rar"))     return CC_ARCHIVE_RAR;
+    return CC_ARCHIVE_UNKNOWN;
+}
+
+static cc_archive_format format_from_name(const char *name)
+{
+    if (!strcasecmp(name, "cute"))    return CC_ARCHIVE_CUTE;
+    if (!strcasecmp(name, "zip"))     return CC_ARCHIVE_ZIP;
+    if (!strcasecmp(name, "tar"))     return CC_ARCHIVE_TAR;
+    if (!strcasecmp(name, "tar.gz"))  return CC_ARCHIVE_TAR_GZ;
+    if (!strcasecmp(name, "tgz"))     return CC_ARCHIVE_TAR_GZ;
+    if (!strcasecmp(name, "tar.bz2")) return CC_ARCHIVE_TAR_BZ2;
+    if (!strcasecmp(name, "tar.xz"))  return CC_ARCHIVE_TAR_XZ;
+    if (!strcasecmp(name, "7z"))      return CC_ARCHIVE_SEVEN_Z;
+    if (!strcasecmp(name, "rar"))     return CC_ARCHIVE_RAR;
+    return CC_ARCHIVE_UNKNOWN;
+}
+
+static void json_print_string(FILE *f, const char *s)
+{
+    fputc('"', f);
+    for (const unsigned char *p = (const unsigned char *)s; *p; p++) {
+        switch (*p) {
+        case '"':  fputs("\\\"", f); break;
+        case '\\': fputs("\\\\", f); break;
+        case '\b': fputs("\\b", f);  break;
+        case '\f': fputs("\\f", f);  break;
+        case '\n': fputs("\\n", f);  break;
+        case '\r': fputs("\\r", f);  break;
+        case '\t': fputs("\\t", f);  break;
+        default:
+            if (*p < 0x20) fprintf(f, "\\u%04x", *p);
+            else fputc(*p, f);
+        }
+    }
+    fputc('"', f);
+}
+
+static int cmd_archive_detect(const char *path)
+{
+    cc_archive_format fmt = cc_archive_detect_path(path);
+    if (fmt == CC_ARCHIVE_UNKNOWN) {
+        printf("unknown\n");
+        return 1;
+    }
+    printf("%s\n", cc_archive_format_name(fmt));
+    return 0;
+}
+
+static int cmd_archive_list(const char *path)
+{
+    cc_archive *a = cc_archive_open(path);
+    if (!a) {
+        fprintf(stderr, "error: cannot open archive %s\n", path);
+        return 1;
+    }
+    int count = cc_archive_count(a);
+    printf("{\"format\":");
+    json_print_string(stdout, cc_archive_format_name(cc_archive_format_of(a)));
+    printf(",\"count\":%d,\"entries\":[", count);
+    for (int i = 0; i < count; i++) {
+        const cc_archive_entry *e = cc_archive_entry_at(a, i);
+        if (!e) continue;
+        if (i > 0) fputc(',', stdout);
+        printf("{\"path\":");
+        json_print_string(stdout, e->path);
+        printf(",\"size\":%llu,\"compressed_size\":%llu,\"mtime\":%llu,"
+               "\"is_dir\":%s,\"is_encrypted\":%s,\"is_symlink\":%s}",
+            (unsigned long long)e->size,
+            (unsigned long long)e->compressed_size,
+            (unsigned long long)e->mtime,
+            e->is_dir ? "true" : "false",
+            e->is_encrypted ? "true" : "false",
+            e->is_symlink ? "true" : "false");
+    }
+    printf("]}\n");
+    cc_archive_close(a);
+    return 0;
+}
+
+static int cmd_archive_extract(int argc, char **argv)
+{
+    /* archive extract <path> -o <dest> [-i <index>] */
+    const char *src = NULL, *dest = NULL;
+    int index = -1;
+    for (int i = 0; i < argc; i++) {
+        if (!strcmp(argv[i], "-o") && i + 1 < argc) dest = argv[++i];
+        else if (!strcmp(argv[i], "-i") && i + 1 < argc) index = atoi(argv[++i]);
+        else if (!src) src = argv[i];
+    }
+    if (!src || !dest) {
+        fprintf(stderr, "usage: archive extract <path> -o <dest> [-i <index>]\n");
+        return 1;
+    }
+    cc_archive *a = cc_archive_open(src);
+    if (!a) {
+        fprintf(stderr, "error: cannot open archive %s\n", src);
+        return 1;
+    }
+    int rc;
+    if (index >= 0) {
+        rc = cc_archive_extract_to(a, index, dest);
+        if (rc == 0) printf("extracted entry %d → %s\n", index, dest);
+    } else {
+        rc = cc_archive_extract_all(a, dest);
+        if (rc == 0) printf("extracted %d entries → %s\n", cc_archive_count(a), dest);
+    }
+    cc_archive_close(a);
+    if (rc != 0) {
+        fprintf(stderr, "error: extract failed (%d)\n", rc);
+        return 1;
+    }
+    return 0;
+}
+
+static int cmd_archive_create(int argc, char **argv)
+{
+    /* archive create [-f <fmt>] <out> <files...>
+     * Format defaults to whatever the output extension implies. */
+    cc_archive_format fmt = CC_ARCHIVE_UNKNOWN;
+    const char *out = NULL;
+    int first_input = -1;
+    for (int i = 0; i < argc; i++) {
+        if (!strcmp(argv[i], "-f") && i + 1 < argc) {
+            fmt = format_from_name(argv[++i]);
+            if (fmt == CC_ARCHIVE_UNKNOWN) {
+                fprintf(stderr, "error: unknown format '%s'\n", argv[i]);
+                return 1;
+            }
+        } else if (!out) {
+            out = argv[i];
+        } else {
+            first_input = i;
+            break;
+        }
+    }
+    if (!out || first_input < 0) {
+        fprintf(stderr, "usage: archive create [-f <fmt>] <out> <files...>\n");
+        return 1;
+    }
+    if (fmt == CC_ARCHIVE_UNKNOWN) fmt = format_from_path(out);
+    if (fmt == CC_ARCHIVE_UNKNOWN) fmt = CC_ARCHIVE_CUTE; /* sensible default */
+
+    cc_archive_writer *w = cc_archive_create(out, fmt);
+    if (!w) {
+        fprintf(stderr,
+            "error: archive create not yet implemented in libcutecontainer\n"
+            "       (cc_archive_create / depo_archive_encrypt are stubs).\n"
+            "       Reading side (detect/list/extract) is fully functional.\n");
+        return 2;
+    }
+    int added = 0;
+    for (int i = first_input; i < argc; i++) {
+        const char *disk = argv[i];
+        /* archive_path = basename of disk path */
+        const char *slash = strrchr(disk, '/');
+        const char *name = slash ? slash + 1 : disk;
+        int rc = cc_archive_add_file(w, name, disk);
+        if (rc != 0) {
+            fprintf(stderr, "warning: skipped %s (%d)\n", disk, rc);
+            continue;
+        }
+        added++;
+    }
+    int rc = cc_archive_finish(w);
+    cc_archive_writer_destroy(w);
+    if (rc != 0) {
+        fprintf(stderr, "error: finish failed (%d)\n", rc);
+        return 1;
+    }
+    printf("created %s (%s, %d entries)\n", out, cc_archive_format_name(fmt), added);
+    return 0;
+}
+
+static int cmd_archive(int argc, char **argv)
+{
+    if (argc < 1) {
+        fprintf(stderr,
+            "usage:\n"
+            "  cutecontainer archive detect <path>\n"
+            "  cutecontainer archive list <path>\n"
+            "  cutecontainer archive extract <path> -o <dest> [-i <index>]\n"
+            "  cutecontainer archive create [-f <fmt>] <out> <files...>\n"
+            "    formats: cute zip tar tar.gz tar.bz2 tar.xz 7z\n"
+        );
+        return 1;
+    }
+    const char *sub = argv[0];
+    if (!strcmp(sub, "detect")  && argc >= 2) return cmd_archive_detect(argv[1]);
+    if (!strcmp(sub, "list")    && argc >= 2) return cmd_archive_list(argv[1]);
+    if (!strcmp(sub, "extract")           )   return cmd_archive_extract(argc - 1, argv + 1);
+    if (!strcmp(sub, "create")            )   return cmd_archive_create(argc - 1, argv + 1);
+
+    fprintf(stderr, "error: unknown archive subcommand '%s'\n", sub);
+    return 1;
+}
+
 /* ---- Main ---- */
 
 int main(int argc, char **argv)
@@ -328,6 +554,9 @@ int main(int argc, char **argv)
 
     if (strcmp(cmd, "unlock") == 0)
         return cmd_unlock(argc - 2, argv + 2);
+
+    if (strcmp(cmd, "archive") == 0)
+        return cmd_archive(argc - 2, argv + 2);
 
     /* auto-detect: just a file path */
     return cmd_auto(argv[1]);
