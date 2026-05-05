@@ -135,6 +135,7 @@ static int cmd_compress(const char *path, int level)
     cc_container *c = cc_container_create(CC_TYPE_RAW);
     cc_container_set_payload(c, in, in_len);
     cc_container_set_layers(c, CC_LAYER_COMPRESSED);
+    cc_container_set_compression_level(c, level);
 
     uint8_t *out = NULL;
     size_t out_len = 0;
@@ -316,7 +317,6 @@ int main(int argc, char **argv)
             file_idx = 4;
         }
         if (file_idx >= argc) { usage(); return 1; }
-        (void)level; /* TODO: pass through container layer config */
         return cmd_compress(argv[file_idx], level);
     }
 

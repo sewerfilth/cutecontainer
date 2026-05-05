@@ -36,6 +36,7 @@ struct cc_container {
     uint8_t  pk[1184];  int has_pk;
     uint8_t  sk[2400];  int has_sk;
     int owns_meta, owns_payload;
+    int compression_level;
 };
 
 const char *cc_content_type_name(cc_content_type type) {
@@ -67,7 +68,15 @@ cc_container *cc_container_create(cc_content_type type) {
     if (!c) return NULL;
     c->type = type;
     c->version = CC_CONTAINER_VERSION;
+    c->compression_level = CP_LEVEL_DEFAULT;
     return c;
+}
+
+void cc_container_set_compression_level(cc_container *c, int level) {
+    if (!c) return;
+    if (level < CP_LEVEL_FAST) level = CP_LEVEL_FAST;
+    if (level > CP_LEVEL_MAX)  level = CP_LEVEL_MAX;
+    c->compression_level = level;
 }
 
 void cc_container_set_meta(cc_container *c, const void *meta, size_t s) {
@@ -96,7 +105,8 @@ int cc_container_write(cc_container *c, uint8_t **out, size_t *out_len) {
     if (c->layer_flags & CC_LAYER_COMPRESSED) {
         size_t bound = cp_compress_bound(payload_sz);
         uint8_t *comp = malloc(bound); if (!comp) return CC_ERR_NOMEM;
-        int64_t cs = cp_compress(payload, payload_sz, comp, bound, CP_LEVEL_DEFAULT);
+        int level = c->compression_level ? c->compression_level : CP_LEVEL_DEFAULT;
+        int64_t cs = cp_compress(payload, payload_sz, comp, bound, level);
         if (cs < 0) { free(comp); return CC_ERR_IO; }
         payload = comp; payload_sz = (size_t)cs; free_payload = 1;
     }

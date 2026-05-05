@@ -15,9 +15,26 @@
 extern "C" {
 #endif
 
-/* Format constants */
+/* Format constants
+ *
+ * v01 layout (legacy, still readable):
+ *   block_payload = freq_table[512] + stream_sym_count[4] + rans_data
+ *                 OR raw LZ stream — distinguished by heuristic
+ *                 (freq_sum == CP_RANS_SCALE).
+ *
+ * v02 layout: same block header, but block_payload starts with a 1-byte
+ * type tag — removes the heuristic and lets the encoder cleanly fall
+ * back to raw when rANS would overflow.
+ *
+ *   block_payload = type_byte + (raw_lz_stream | rans_payload)
+ *     type 0x00 = raw LZ stream
+ *     type 0x01 = freq_table[512] + stream_sym_count[4] + rans_data
+ */
 #define CP_MAGIC            "PRSS"
-#define CP_VERSION          0x01
+#define CP_VERSION          0x02
+#define CP_VERSION_LEGACY   0x01
+#define CP_BLOCK_TYPE_RAW   0x00
+#define CP_BLOCK_TYPE_RANS  0x01
 #define CP_BLOCK_SIZE       (256 * 1024)
 #define CP_WINDOW_SIZE      (64 * 1024)
 #define CP_MIN_MATCH        4

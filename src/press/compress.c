@@ -123,9 +123,16 @@ int64_t cp_compress(
     size_t out_pos = CP_HDR_SIZE;
     size_t in_pos = 0;
 
-    /* temp buffers for LZ stream and rANS output */
+    /* temp buffers for LZ stream and rANS output.
+     * stream_cap: each input byte expands to at most 2 bytes in the LZ
+     * literal stream (escape for 0xFE/0xFF), so 2x is the tight worst
+     * case — but matches +1B header are always ≤ 4 bytes for ≥ 4 input
+     * bytes, so the literal-only worst case dominates.
+     * rans_cap: 4-stream rANS with 8-bit renorm flushes ≤ 1 byte per
+     * symbol on average + 16 bytes for state flush; stream_cap + 64
+     * is comfortably above the worst case for high-entropy inputs. */
     size_t stream_cap = CP_BLOCK_SIZE * 2;
-    size_t rans_cap = CP_BLOCK_SIZE * 2;
+    size_t rans_cap = stream_cap + 64;
     uint8_t *stream_buf = malloc(stream_cap);
     uint8_t *rans_buf = malloc(rans_cap);
     if (!stream_buf || !rans_buf) {
@@ -143,13 +150,16 @@ int64_t cp_compress(
         /* checksum of uncompressed block */
         uint32_t checksum = cp_xxhash32(block, block_len, 0);
 
-        /* LZ encode */
+        /* LZ encode. With stream_cap == 2 * block_size this should never
+         * overflow; if it ever does the buffer is undersized — abort
+         * rather than fall through with a garbled stream that the
+         * decoder would misread as a valid LZ encoding. */
         size_t stream_len = lz_encode(block, block_len, level,
                                       stream_buf, stream_cap);
-        if (stream_len == 0) {
-            /* LZ failed (shouldn't happen with sufficient buffer), store raw */
-            memcpy(stream_buf, block, block_len);
-            stream_len = block_len;
+        if (stream_len == 0 && block_len > 0) {
+            free(stream_buf);
+            free(rans_buf);
+            return CP_ERR_NOMEM;
         }
 
         /* frequency count on the LZ stream */
@@ -157,21 +167,23 @@ int64_t cp_compress(
         cp_freq_count(stream_buf, stream_len, &ft);
         cp_freq_normalize(&ft);
 
-        /* rANS encode */
+        /* rANS encode. Returns 0 on bound failure (C fallback) — fall back
+         * to a raw block in that case. */
         cp_rans_state state;
         size_t rans_len = cp_rans_encode(&state, stream_buf, stream_len,
                                          ft.syms, rans_buf, rans_cap);
 
-        /* total compressed block = freq table + 4-byte stream_len + rans data */
-        size_t compressed_size = CP_FREQ_TABLE_SIZE + 4 + rans_len;
+        /* Decide block type: rANS+LZ if the encoder produced output and
+         * the result is smaller than storing the raw LZ stream;
+         * otherwise raw. The block payload is prefixed with a 1-byte
+         * type tag (v02 format). */
+        size_t rans_payload = CP_FREQ_TABLE_SIZE + 4 + rans_len;
+        int use_rans = (rans_len > 0) && (rans_payload < stream_len);
 
-        /* if compression expanded, store raw stream instead */
-        int store_raw = (compressed_size >= stream_len + CP_FREQ_TABLE_SIZE + 4);
-        if (store_raw) {
-            compressed_size = stream_len;
-        }
+        size_t body_size = use_rans ? rans_payload : stream_len;
+        size_t compressed_size = 1 + body_size; /* +1 for type byte */
 
-        /* check output space */
+        /* check output space (block header + payload + end marker) */
         if (out_pos + CP_BLOCK_HDR_SIZE + compressed_size + CP_BLOCK_HDR_SIZE > dst_cap) {
             free(stream_buf);
             free(rans_buf);
@@ -183,24 +195,25 @@ int64_t cp_compress(
         le32_put(dst + out_pos + 4, checksum);
         out_pos += CP_BLOCK_HDR_SIZE;
 
-        if (store_raw) {
-            /* store LZ stream directly (no freq table prefix = decoder detects raw) */
-            memcpy(dst + out_pos, stream_buf, stream_len);
-            out_pos += stream_len;
-        } else {
-            /* write frequency table (256 x uint16 LE) */
+        /* type byte */
+        dst[out_pos++] = use_rans ? CP_BLOCK_TYPE_RANS : CP_BLOCK_TYPE_RAW;
+
+        if (use_rans) {
+            /* freq table (256 x uint16 LE) */
             for (int i = 0; i < 256; i++) {
                 le16_put(dst + out_pos, ft.syms[i].freq);
                 out_pos += 2;
             }
-
-            /* write stream length (number of symbols to decode) */
+            /* number of LZ symbols to decode */
             le32_put(dst + out_pos, (uint32_t)stream_len);
             out_pos += 4;
-
-            /* write rANS data */
+            /* rANS data */
             memcpy(dst + out_pos, rans_buf, rans_len);
             out_pos += rans_len;
+        } else {
+            /* raw LZ stream */
+            memcpy(dst + out_pos, stream_buf, stream_len);
+            out_pos += stream_len;
         }
 
         in_pos += block_len;

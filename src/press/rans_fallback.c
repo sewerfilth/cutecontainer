@@ -10,8 +10,9 @@
 
 /* ---- helpers ---- */
 
-static inline void rans_enc_put(uint32_t *state, uint8_t **pptr,
-                                uint16_t freq, uint16_t cumfreq)
+/* Returns 1 on success, 0 if writing would underflow `base`. */
+static inline int rans_enc_put(uint32_t *state, uint8_t **pptr, uint8_t *base,
+                               uint16_t freq, uint16_t cumfreq)
 {
     uint32_t s = *state;
     /* renormalize: flush 8 bits at a time.
@@ -19,11 +20,13 @@ static inline void rans_enc_put(uint32_t *state, uint8_t **pptr,
      * upper = ((RANS_L >> SCALE_BITS) << 8) * freq = freq << 19 */
     uint32_t upper = ((CP_RANS_L >> CP_RANS_SCALE_BITS) << 8) * freq;
     while (s >= upper) {
+        if (*pptr <= base) return 0;
         *--(*pptr) = (uint8_t)(s & 0xFF);
         s >>= 8;
     }
     /* encode step */
     *state = ((s / freq) << CP_RANS_SCALE_BITS) + (s % freq) + cumfreq;
+    return 1;
 }
 
 static inline uint32_t rans_dec_get(uint32_t state)
@@ -83,11 +86,14 @@ size_t cp_rans_encode(
         i--;
         int stream = i % CP_RANS_STREAMS;
         uint8_t sym = symbols[i];
-        rans_enc_put(&state->state[stream], &ptr,
-                     sym_table[sym].freq, sym_table[sym].cumfreq);
+        if (!rans_enc_put(&state->state[stream], &ptr, out,
+                          sym_table[sym].freq, sym_table[sym].cumfreq)) {
+            return 0; /* output would underflow — caller falls back to raw */
+        }
     }
 
     /* flush final states (each state = 4 bytes, big-endian) */
+    if ((size_t)(ptr - out) < (size_t)(CP_RANS_STREAMS * 4)) return 0;
     for (int i = CP_RANS_STREAMS - 1; i >= 0; i--) {
         ptr -= 4;
         ptr[0] = (uint8_t)(state->state[i] >> 24);

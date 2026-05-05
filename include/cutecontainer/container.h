@@ -50,6 +50,10 @@ void            cc_container_set_layers(cc_container *c, uint16_t layer_flags);
 void            cc_container_set_encrypt_key(cc_container *c, const uint8_t pk[1184]);
 void            cc_container_set_decrypt_key(cc_container *c, const uint8_t sk[2400]);
 
+/* Override the press compression level (1=fast..9=max). Default is
+ * CP_LEVEL_DEFAULT (5). Only consulted when CC_LAYER_COMPRESSED is set. */
+void            cc_container_set_compression_level(cc_container *c, int level);
+
 int             cc_container_write(cc_container *c, uint8_t **out, size_t *out_len);
 int             cc_container_write_file(cc_container *c, const char *path);
 
