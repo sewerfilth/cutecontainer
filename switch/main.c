@@ -18,20 +18,23 @@ static void demo_compress(void) {
     size_t in_len = strlen(input);
 
     uint8_t compressed[512];
-    size_t comp_len = sizeof(compressed);
-    int rc = cp_compress((const uint8_t *)input, in_len, compressed, &comp_len);
+    int64_t comp_len = cp_compress((const uint8_t *)input, in_len,
+                                   compressed, sizeof(compressed), 1);
 
     printf("  input:      %zu bytes\n", in_len);
-    printf("  compressed: %zu bytes (%.0f%%)\n", comp_len, 100.0 * comp_len / in_len);
-    printf("  result:     %s\n", rc == 0 ? "OK" : "FAIL");
+    if (comp_len > 0) {
+        printf("  compressed: %lld bytes (%.0f%%)\n", (long long)comp_len,
+               100.0 * comp_len / in_len);
+        printf("  result:     OK\n");
 
-    if (rc == 0) {
         uint8_t decompressed[512];
-        size_t dec_len = sizeof(decompressed);
-        rc = cp_decompress(compressed, comp_len, decompressed, &dec_len);
+        int64_t dec_len = cp_decompress(compressed, (size_t)comp_len,
+                                        decompressed, sizeof(decompressed));
         printf("  roundtrip:  %s\n\n",
-               rc == 0 && dec_len == in_len && memcmp(decompressed, input, in_len) == 0
+               dec_len == (int64_t)in_len && memcmp(decompressed, input, in_len) == 0
                    ? "OK" : "FAIL");
+    } else {
+        printf("  result:     FAIL (%lld)\n\n", (long long)comp_len);
     }
 }
 

@@ -7,7 +7,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#ifndef _WIN32
+#if defined(__SWITCH__)
+    /* no dynamic loading or filesystem scanning on Switch */
+#elif !defined(_WIN32)
 #include <dlfcn.h>
 #include <dirent.h>
 #include <unistd.h>
@@ -72,7 +74,10 @@ typedef const cc_module *(*cc_module_init_fn)(void);
 
 int cc_load_module(const char *path)
 {
-#ifndef _WIN32
+#if defined(__SWITCH__)
+    (void)path;
+    return -1;  /* no dynamic loading on Switch */
+#elif !defined(_WIN32)
     void *handle = dlopen(path, RTLD_NOW | RTLD_LOCAL);
     if (!handle) return -1;
 
@@ -101,7 +106,10 @@ int cc_load_modules(const char *dir)
 {
     int loaded = 0;
 
-#ifndef _WIN32
+#if defined(__SWITCH__)
+    (void)dir;
+    /* no filesystem scanning on Switch — built-in modules only */
+#elif !defined(_WIN32)
     DIR *d = opendir(dir);
     if (!d) return 0;
 
@@ -164,6 +172,7 @@ void cc_sdk_init_full(void)
 {
     cc_sdk_init();
 
+#ifndef __SWITCH__
     /* load dynamic modules from default paths */
     const char *home = getenv("HOME");
     if (home) {
@@ -177,4 +186,5 @@ void cc_sdk_init_full(void)
 #ifdef __APPLE__
     cc_load_modules("/Library/Application Support/cutecontainer/modules");
 #endif
+#endif /* !__SWITCH__ */
 }

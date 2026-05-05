@@ -91,15 +91,20 @@ _cc_fe_sub:
     ldp     x10, x11, [x2, #16]
     ldr     x12, [x2, #32]
 
-    /* Add 2p to a before subtracting b */
-    movz    x13, #0xFFFF
+    /* Add 2p to a before subtracting b. 2p in radix 2^51:
+     *   2p[0] = 2*(2^51 - 19) = 2^52 - 38 = 0xFFFFFFFFFFFDA
+     *   2p[1..4] = 2*(2^51 - 1) = 2^52 -  2 = 0xFFFFFFFFFFFFE
+     * The previous version used p[1..4] for limbs 1..4, so the added
+     * constant was not a multiple of p — fe_sub returned a value not
+     * congruent to (a - b) mod p. */
+    movz    x13, #0xFFFE                /* low 16 bits of 2p[1..4] */
     movk    x13, #0xFFFF, lsl #16
     movk    x13, #0xFFFF, lsl #32
-    movk    x13, #0x0007, lsl #48       /* 0x7FFFFFFFFFFFF = 2^51 - 1 */
+    movk    x13, #0x000F, lsl #48       /* 0xFFFFFFFFFFFFE = 2^52 - 2 */
     movz    x14, #0xFFDA                /* low 16 bits of 2p[0] */
     movk    x14, #0xFFFF, lsl #16
     movk    x14, #0xFFFF, lsl #32
-    movk    x14, #0x000F, lsl #48       /* 0xFFFFFFFFFFFDA */
+    movk    x14, #0x000F, lsl #48       /* 0xFFFFFFFFFFFDA = 2^52 - 38 */
 
     add     x3, x3, x14                /* a[0] + 2p[0] */
     add     x4, x4, x13                /* a[1] + 2p[1] */
@@ -172,17 +177,12 @@ _cc_fe_cswap:
     str     x12, [x1, #32]
     ret
 
-/* ============================================================
- * cc_fe_reduce: canonical reduction mod p = 2^255 - 19
- * x0 = r (in-place)
- *
- * 1. Carry propagation through limbs
- * 2. Reduce: if value >= p, subtract p
- *
- * After this, all limbs are < 2^51 and the value is < p.
- * ============================================================ */
-.globl _cc_fe_reduce
-_cc_fe_reduce:
+/* cc_fe_reduce is implemented in C (src/crypt/curve.c). The ASM
+ * version below only carry-propagated; the value could remain in
+ * [p, 2^256), so pack would output a non-canonical representation.
+ * The C version adds the final conditional subtraction. */
+#if 0
+_cc_fe_reduce_unused:
     ldp     x1, x2, [x0]           /* v[0], v[1] */
     ldp     x3, x4, [x0, #16]      /* v[2], v[3] */
     ldr     x5, [x0, #32]          /* v[4] */
@@ -216,20 +216,14 @@ _cc_fe_reduce:
     stp     x3, x4, [x0, #16]
     str     x5, [x0, #32]
     ret
+#endif
 
-/* ============================================================
- * cc_fe_mul: r = a * b mod p
- * x0 = r, x1 = a, x2 = b
- *
- * Schoolbook 5×5 multiply with interleaved reduction.
- * Uses the identity: 2^255 ≡ 19 (mod p)
- * So limb products that land in position ≥5 are folded back
- * with factor 19.
- *
- * Uses: x0-x15, x16-x17 (all caller-saved on AAPCS64)
- * ============================================================ */
-.globl _cc_fe_mul
-_cc_fe_mul:
+/* cc_fe_mul and cc_fe_sqr are implemented in C (src/crypt/curve.c).
+ * The previous ASM implementation here used single-width MUL on 51-bit
+ * limbs whose products are up to 102 bits — high bits were silently
+ * dropped. The C implementation uses __uint128_t accumulators. */
+#if 0
+_cc_fe_mul_unused:
     /* Save frame */
     stp     x19, x20, [sp, #-64]!
     stp     x21, x22, [sp, #16]
@@ -354,18 +348,10 @@ _cc_fe_mul:
     ldp     x19, x20, [sp], #64
     ret
 
-/* ============================================================
- * cc_fe_sqr: r = a^2 mod p
- * x0 = r, x1 = a
- *
- * Same structure as mul but with doubled cross terms.
- * Saves ~20% ops over mul(a,a) by exploiting symmetry.
- * ============================================================ */
-.globl _cc_fe_sqr
-_cc_fe_sqr:
-    mov     x2, x1                  /* b = a */
-    b       _cc_fe_mul              /* tail-call mul for now */
-    /* TODO: dedicated sqr with doubled cross-terms */
+_cc_fe_sqr_unused:
+    mov     x2, x1
+    b       _cc_fe_mul
+#endif
 
 /* ============================================================
  * cc_fe_pack: serialize fe to 32 bytes (little-endian)
@@ -375,13 +361,18 @@ _cc_fe_sqr:
  * ============================================================ */
 .globl _cc_fe_pack
 _cc_fe_pack:
+    stp     x29, x30, [sp, #-16]!
+    mov     x29, sp
     stp     x19, x20, [sp, #-16]!
 
-    /* Reduce first */
+    /* Reduce first (in-place on the input). cc_fe_reduce clobbers x1, so
+     * stash the input pointer in a callee-saved register. */
     mov     x19, x0                 /* save out ptr */
+    mov     x20, x1                 /* save in ptr */
     mov     x0, x1
     bl      _cc_fe_reduce
     mov     x0, x19
+    mov     x1, x20
 
     /* Reload reduced limbs */
     ldp     x2, x3, [x1]           /* v[0], v[1] */
@@ -408,6 +399,7 @@ _cc_fe_pack:
     stp     x9, x10, [x0, #16]
 
     ldp     x19, x20, [sp], #16
+    ldp     x29, x30, [sp], #16
     ret
 
 /* ============================================================

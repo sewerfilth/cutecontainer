@@ -282,16 +282,21 @@ Lladder_loop:
 
     /* z2 = E * (AA + a24 * E)
      * a24 = 121666 = (486662 + 2) / 4
-     * Compute: a24_E = 121666 * E (need fe_mul_scalar — use mul with const fe)
-     * Simpler: tmp0 still has AA. tmp1 = a24*E via repeated add or mul.
-     * For now, construct a24 as a field element and multiply.
+     *
+     * At this point the other temp slots hold:
+     *   tmp0 = AA   (from step 7 / 9 — fe_mul x2 = AA*BB does not clobber tmp0)
+     *   tmp1 = BB   (will be overwritten below)
+     *   tmp2 = E    (AA - BB)
+     *   tmp3 = CB
+     *   tmp4 = DA
      */
-    /* tmp1 = a24 as fe (121666) */
+    /* tmp1 = a24 as fe (121665 in limb v[0], others 0).
+     * RFC 7748 §5 defines a24 = (A - 2) / 4 = 121665 for Curve25519. */
     add     x0, sp, #FE_TMP1
     bl      _cc_fe_zero
-    movz    x1, #0xDB42             /* 121666 = 0x1DB42 */
+    movz    x1, #0xDB41             /* 121665 = 0x1DB41 */
     movk    x1, #0x1, lsl #16
-    str     x1, [sp, #FE_TMP1]     /* v[0] = 121666, rest = 0 */
+    str     x1, [sp, #FE_TMP1]     /* v[0] = 121665, rest = 0 */
 
     /* tmp1 = a24 * E */
     add     x0, sp, #FE_TMP1
@@ -299,35 +304,16 @@ Lladder_loop:
     add     x2, sp, #FE_TMP2       /* E */
     bl      _cc_fe_mul
 
-    /* tmp0 = AA + a24*E  (tmp0 still has AA from before? No — we overwrote it.)
-     * Actually tmp0 was overwritten by sqr of A. Let me re-derive AA. */
-    /* Correction: at this point tmp0 had AA, but we used it for x3 add.
-     * We need to recompute or save it. This is a register allocation issue.
-     * For correctness, let's recompute: z2 = E * (BB + E) ... no.
-     * Actually the standard formula: z2 = E * (AA + a24*E)
-     * We need AA. It was in tmp0 but tmp0 was used for the add in x3.
-     * Solution: compute AA * BB for x2 first, but save AA separately.
-     * For now, recompute: AA = x2 / BB ... no, that needs inv.
-     *
-     * Simpler fix: AA + a24*E = BB + E + a24*E = BB + (1+a24)*E = BB + 121667*E
-     * But that's not simpler. Let's just note that AA = tmp0 was clobbered
-     * and we need to restructure. The proper fix is to save AA.
-     *
-     * For this iteration: use the identity AA + a24*E = AA + a24*(AA-BB)
-     * = (1+a24)*AA - a24*BB = 121667*AA - 121666*BB
-     *
-     * But we already computed x2 = AA*BB and don't have AA/BB separately.
-     *
-     * Real fix: restructure the computation order. For now, do a
-     * placeholder that just stores z2 = E (incorrect but compiles).
-     * The proper Montgomery ladder step will be refined.
-     */
+    /* tmp1 = a24*E + AA */
+    add     x0, sp, #FE_TMP1
+    add     x1, sp, #FE_TMP1
+    add     x2, sp, #FE_TMP0       /* AA */
+    bl      _cc_fe_add
 
-    /* z2 = E * (tmp1 + recomputed_AA) — PLACEHOLDER */
-    /* TODO: save AA before clobbering tmp0 */
+    /* z2 = E * (AA + a24*E) */
     add     x0, sp, #FE_Z2
     add     x1, sp, #FE_TMP2       /* E */
-    add     x2, sp, #FE_TMP1       /* a24*E as placeholder */
+    add     x2, sp, #FE_TMP1       /* AA + a24*E */
     bl      _cc_fe_mul
 
     /* Loop */
@@ -366,28 +352,7 @@ Lladder_loop:
     ldp     x29, x30, [sp], #16
     ret
 
-/* ============================================================
- * cc_fe_inv: r = a^(p-2) mod p  (Fermat's little theorem)
- * x0 = r, x1 = a
- *
- * Uses an addition chain for p-2 = 2^255 - 21.
- * This is a sequence of squares and multiplies.
- * Delegates to C for now — proper chain is ~255 sqr + 11 mul.
- * ============================================================ */
-.globl _cc_fe_inv
-_cc_fe_inv:
-    /* For now: compute a^(p-2) via repeated squaring.
-     * Full addition chain optimization is a TODO.
-     * This placeholder copies input to output.
-     * The C wrapper will provide a working fallback.
-     */
-    ldp     x2, x3, [x1]
-    stp     x2, x3, [x0]
-    ldp     x2, x3, [x1, #16]
-    stp     x2, x3, [x0, #16]
-    ldr     x2, [x1, #32]
-    str     x2, [x0, #32]
-    ret
-    /* TODO: proper addition chain for 2^255 - 21 */
+/* cc_fe_inv is implemented in C (src/crypt/curve.c) using the standard
+ * Curve25519 inversion addition chain over cc_fe_mul / cc_fe_sqr. */
 
 #endif /* __aarch64__ */

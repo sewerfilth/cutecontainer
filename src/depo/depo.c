@@ -6901,6 +6901,8 @@ static void depo_opts_to_cli(const depo_opts *o, cli_opts *c,
     c->totp_secret  = o->totp_secret;
     c->totp_code    = o->totp_code;
     c->force        = o->force;
+    c->refresh_key  = o->refresh_key;
+    c->fuse_box     = o->fuse_box;
     c->input        = in;
     c->output       = out;
 }
@@ -6973,7 +6975,17 @@ int depo_compress_file(const char *i, const char *o) { (void)i;(void)o; return -
 int depo_decompress_file(const char *i, const char *o) { (void)i;(void)o; return -1; }
 int depo_split(const char *p, size_t s) { (void)p;(void)s; return -1; }
 int depo_join(const char *p, const char *o) { (void)p;(void)o; return -1; }
-int depo_fuse_refresh(const char *p, const char *k, uint16_t n) { (void)p;(void)k;(void)n; return -1; }
+int depo_fuse_refresh(const char *path, const char *refresh_key, uint16_t new_fuses) {
+    if (!path || !refresh_key) return -1;
+    cli_opts c;
+    memset(&c, 0, sizeof(c));
+    c.headless    = 1;
+    c.quiet       = 1;
+    c.input       = path;
+    c.do_refresh  = refresh_key;
+    c.fuses       = new_fuses;   /* 0 = restore to original max_fuses */
+    return do_fuse_refresh(path, &c);
+}
 void depo_secure_zero(void *p, size_t l) { secure_zero(p, l); }
 void depo_harden_process(void) { harden_process(); }
 void *depo_secure_alloc(size_t l) { return secure_alloc(l); }

@@ -76,6 +76,7 @@ set(CRYPT_SOURCES
     src/crypt/pipe.c
     src/crypt/cutehash.c
     src/crypt/cascade.c
+    src/crypt/curve.c
     src/crypt/fuse.c
     src/crypt/token.c
 )
@@ -86,10 +87,15 @@ if(NOT MSVC)
         set(CRYPT_ASM
             asm/aarch64/crypt/aes256.S
             asm/aarch64/crypt/ntt.S
-            asm/aarch64/crypt/cascade/fe25519.S
-            asm/aarch64/crypt/cascade/scalarmult.S
-            asm/aarch64/crypt/cascade/cutehash.S
         )
+        # cascade asm uses Mach-O relocations (@PAGE/@PAGEOFF) — Apple only
+        if(APPLE)
+            list(APPEND CRYPT_ASM
+                asm/aarch64/crypt/cascade/fe25519.S
+                asm/aarch64/crypt/cascade/scalarmult.S
+                asm/aarch64/crypt/cascade/cutehash.S
+            )
+        endif()
         add_compile_definitions(CP_ARCH_AARCH64 CC_ARCH_AARCH64 CF_ARCH_AARCH64)
     elseif(CC_ARCH STREQUAL "x86_64")
         set(CRYPT_ASM
@@ -201,9 +207,12 @@ set(CORE_SOURCES
 # depo module — encrypted containers, lock modes, archives
 # ──────────────────────────────────────────────────────────────
 
-set(DEPO_SOURCES
-    src/depo/depo.c
-)
+if(CMAKE_SYSTEM_NAME STREQUAL "Generic")
+    # Switch / bare-metal: depo uses POSIX terminal I/O, mmap, etc.
+    set(DEPO_SOURCES "")
+else()
+    set(DEPO_SOURCES src/depo/depo.c)
+endif()
 
 # ──────────────────────────────────────────────────────────────
 # unified library (libcutecontainer.a)
@@ -239,8 +248,8 @@ elseif(OpenCL_FOUND)
     target_link_libraries(cutecontainer PUBLIC OpenCL::OpenCL)
 endif()
 
-# dlopen for dynamic module loading (Unix)
-if(NOT WIN32)
+# dlopen for dynamic module loading (Unix, not bare-metal)
+if(NOT WIN32 AND NOT CMAKE_SYSTEM_NAME STREQUAL "Generic")
     target_link_libraries(cutecontainer PUBLIC dl)
 endif()
 
@@ -260,7 +269,7 @@ endif()
 # standalone targets (CLI, GUI, tests)
 # ──────────────────────────────────────────────────────────────
 
-if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND NOT CMAKE_SYSTEM_NAME STREQUAL "Generic")
 
     # CLI
     add_executable(cutecontainer-cli src/cli/main.c)

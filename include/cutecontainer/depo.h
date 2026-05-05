@@ -74,6 +74,12 @@ typedef struct {
     /* remote fuse */
     const char *remote_url;         /* fuse verification server */
 
+    /* delegated fuse refresh */
+    const char *refresh_key;        /* assign refresh key at lock time
+                                       (master only, set once) */
+    int         fuse_box;           /* renounce master key — only the
+                                       fuse box (and refresh key) can open */
+
     /* archive */
     int         archive;            /* create ARCV archive */
     const char **archive_paths;     /* files/folders to archive */

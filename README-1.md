@@ -2,9 +2,6 @@
 
 Unified `.cute` toolchain. Container format, compression, encryption, spectral film codec, encrypted archives, game asset volumes, and a cross-platform archive manager — in one C11 library with zero external dependencies.
 
-You can find the gui here:
-https://github.com/sewerfilth/cc-gui
-
 ## Quick start
 
 ```bash

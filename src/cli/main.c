@@ -89,6 +89,9 @@ static void usage(void)
         "  cutecontainer archive list    <path>             JSON listing of entries\n"
         "  cutecontainer archive extract <path> -o <dest> [-i <i>]\n"
         "  cutecontainer archive create  [-f <fmt>] <out> <files...>\n"
+        "\n"
+        "Fuse refresh (re-fill fuses on a fuse-box locked file):\n"
+        "  cutecontainer refresh -k <key> [--fuses N] <file.cute>\n"
     );
 }
 
@@ -346,6 +349,8 @@ static int cmd_lock(int argc, char **argv)
     int      engrave_role = 3; /* default: reader */
     const char *public_msg = NULL;
     const char *output = NULL;
+    const char *refresh_key = NULL;
+    int      fuse_box = 0;
 
     for (int i = 0; i < argc; i++) {
         if (!strcmp(argv[i], "-p") && i + 1 < argc) password = argv[++i];
@@ -367,6 +372,8 @@ static int cmd_lock(int argc, char **argv)
             else engrave_role = atoi(r);
         }
         else if (!strcmp(argv[i], "--public") && i + 1 < argc) public_msg = argv[++i];
+        else if (!strcmp(argv[i], "--refresh-key") && i + 1 < argc) refresh_key = argv[++i];
+        else if (!strcmp(argv[i], "--fuse-box")) fuse_box = 1;
         else if (!file) file = argv[i];
     }
 
@@ -374,7 +381,8 @@ static int cmd_lock(int argc, char **argv)
         fprintf(stderr,
             "usage: lock -p <pw> [--fuses N] [--timed N] [--delay N] [--purge]\n"
             "            [--keychain] [--engrave TEXT] [--engrave-role ROLE]\n"
-            "            [--public TEXT] [-o OUT] <file>\n");
+            "            [--public TEXT] [--fuse-box] [--refresh-key PASS]\n"
+            "            [-o OUT] <file>\n");
         return 1;
     }
     if (!password) {
@@ -396,6 +404,8 @@ static int cmd_lock(int argc, char **argv)
     opts.engrave_text = engrave_text;
     opts.engrave_role = (uint8_t)engrave_role;
     opts.public_message = public_msg;
+    opts.refresh_key  = refresh_key;
+    opts.fuse_box     = fuse_box;
 
     char out_path[1024];
     if (output) {
@@ -450,6 +460,38 @@ static int cmd_unlock(int argc, char **argv)
     if (rc != 0) { fprintf(stderr, "error: unlock failed (%d)\n", rc); return 1; }
 
     printf("unlocked %s → %s\n", file, out_path);
+    return 0;
+}
+
+/* ---- Refresh fuses ---- */
+
+static int cmd_refresh(int argc, char **argv)
+{
+    const char *file = NULL;
+    const char *refresh_key = NULL;
+    uint16_t new_fuses = 0;
+
+    for (int i = 0; i < argc; i++) {
+        if ((!strcmp(argv[i], "-k") || !strcmp(argv[i], "--key")) && i + 1 < argc)
+            refresh_key = argv[++i];
+        else if (!strcmp(argv[i], "--fuses") && i + 1 < argc)
+            new_fuses = (uint16_t)atoi(argv[++i]);
+        else if (!file)
+            file = argv[i];
+    }
+
+    if (!file || !refresh_key) {
+        fprintf(stderr,
+            "usage: refresh -k <refresh-key> [--fuses N] <file.cute>\n"
+            "  Requires the file to have been locked with --fuse-box and\n"
+            "  --refresh-key. With --fuses 0 the fuse vault is restored to\n"
+            "  the file's original max_fuses.\n");
+        return 1;
+    }
+
+    int rc = depo_fuse_refresh(file, refresh_key, new_fuses);
+    if (rc != 0) { fprintf(stderr, "error: refresh failed (%d)\n", rc); return 1; }
+    printf("refreshed %s\n", file);
     return 0;
 }
 
@@ -719,6 +761,9 @@ int main(int argc, char **argv)
 
     if (strcmp(cmd, "archive") == 0)
         return cmd_archive(argc - 2, argv + 2);
+
+    if (strcmp(cmd, "refresh") == 0)
+        return cmd_refresh(argc - 2, argv + 2);
 
     /* auto-detect: just a file path */
     return cmd_auto(argv[1]);
