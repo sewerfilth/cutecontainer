@@ -469,7 +469,7 @@ static int cmd_archive_create(int argc, char **argv)
     if (!w) {
         fprintf(stderr,
             "error: archive create for format '%s' is not yet implemented.\n"
-            "       Currently supported for create: zip (STORED / no compression).\n"
+            "       Currently supported for create: zip (STORED), tar (POSIX ustar).\n"
             "       Reading side (detect/list/extract) supports zip / tar / tar.gz /\n"
             "       tar.bz2 / tar.xz / 7z / rar.\n",
             cc_archive_format_name(fmt));

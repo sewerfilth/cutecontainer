@@ -1307,7 +1307,7 @@ struct cc_archive_writer {
 cc_archive_writer *cc_archive_create(const char *path, cc_archive_format format)
 {
     if (!path) return NULL;
-    if (format != CC_ARCHIVE_ZIP) {
+    if (format != CC_ARCHIVE_ZIP && format != CC_ARCHIVE_TAR) {
         /* Other formats still stubbed — fail fast so the CLI emits a clear
          * "format X not yet supported" error rather than producing garbage. */
         return NULL;
@@ -1319,6 +1319,9 @@ cc_archive_writer *cc_archive_create(const char *path, cc_archive_format format)
     w->fp = fp;
     w->format = format;
     w->cap = 16;
+    /* zip needs the entries[] for a central directory at the end; tar
+     * doesn't, but we allocate the same array anyway so cc_archive_finish
+     * can report a unified "added N entries" count without special-casing. */
     w->entries = calloc(w->cap, sizeof(zip_wr_entry));
     if (!w->entries) { fclose(fp); free(w); return NULL; }
     return w;
@@ -1359,10 +1362,91 @@ static int zip_write_local_header(cc_archive_writer *w, const char *name,
     return 0;
 }
 
+/* ── TAR (POSIX ustar) writer ── */
+
+/* Write a uint as zero-padded octal into a fixed-width field, with the
+ * last byte set to NUL (standard tar convention, except for chksum). */
+static void tar_octal_write(char *dst, int width, uint64_t v)
+{
+    int n = width - 1;
+    dst[n] = '\0';
+    for (int i = n - 1; i >= 0; i--) {
+        dst[i] = (char)('0' + (v & 7));
+        v >>= 3;
+    }
+}
+
+static int tar_write_header(cc_archive_writer *w, const char *name,
+                            uint64_t size, uint64_t mtime,
+                            uint32_t mode, char typeflag)
+{
+    uint8_t h[512] = {0};
+    size_t nlen = strlen(name);
+    if (nlen > 100) {
+        /* Path too long for ustar without prefix splitting — refuse for now. */
+        return -1;
+    }
+    memcpy(h, name, nlen);
+    tar_octal_write((char *)(h + 100), 8,  mode & 07777);
+    tar_octal_write((char *)(h + 108), 8,  0);                 /* uid */
+    tar_octal_write((char *)(h + 116), 8,  0);                 /* gid */
+    tar_octal_write((char *)(h + 124), 12, size);
+    tar_octal_write((char *)(h + 136), 12, mtime);
+    /* chksum slot pre-filled with spaces during summing */
+    memset(h + 148, ' ', 8);
+    h[156] = (uint8_t)typeflag;
+    memcpy(h + 257, "ustar", 5);
+    h[262] = '\0';
+    memcpy(h + 263, "00", 2);
+
+    uint32_t sum = 0;
+    for (int i = 0; i < 512; i++) sum += h[i];
+
+    /* Standard form: 6 octal digits, NUL, space. */
+    char cks[8];
+    snprintf(cks, sizeof(cks), "%06o", sum & 0777777u);
+    memcpy(h + 148, cks, 6);
+    h[154] = '\0';
+    h[155] = ' ';
+
+    if (fwrite(h, 1, 512, w->fp) != 512) return -1;
+    w->cur_offset += 512;
+    return 0;
+}
+
+static int tar_pad_block(cc_archive_writer *w, uint64_t data_size)
+{
+    size_t pad = (512u - (size_t)(data_size % 512u)) % 512u;
+    if (pad == 0) return 0;
+    uint8_t zeros[512] = {0};
+    if (fwrite(zeros, 1, pad, w->fp) != pad) return -1;
+    w->cur_offset += pad;
+    return 0;
+}
+
+static int tar_add_buf_meta(cc_archive_writer *w, const char *name,
+                            const void *data, size_t len,
+                            uint64_t mtime, uint32_t mode, char typeflag)
+{
+    if (tar_write_header(w, name, typeflag == '5' ? 0 : (uint64_t)len,
+                         mtime, mode, typeflag) != 0) return -1;
+    if (typeflag != '5' && len > 0) {
+        if (fwrite(data, 1, len, w->fp) != len) return -1;
+        w->cur_offset += len;
+        if (tar_pad_block(w, (uint64_t)len) != 0) return -1;
+    }
+    return 0;
+}
+
 int cc_archive_add_buf(cc_archive_writer *w, const char *archive_path,
                        const void *data, size_t len)
 {
-    if (!w || w->format != CC_ARCHIVE_ZIP || !archive_path) return -1;
+    if (!w || !archive_path) return -1;
+    if (w->format == CC_ARCHIVE_TAR) {
+        return tar_add_buf_meta(w, archive_path, data, len,
+                                (uint64_t)time(NULL), 0644u, '0');
+    }
+    if (w->format != CC_ARCHIVE_ZIP) return -1;
     if (zip_grow_entries(w) != 0) return -1;
     if (len > 0xffffffffu) return -1; /* TODO: ZIP64 */
 
@@ -1408,15 +1492,24 @@ int cc_archive_add_file(cc_archive_writer *w, const char *archive_path,
     }
     fclose(src);
 
-    /* Use the on-disk mtime so re-archived files preserve their stamp. */
+    /* Pull mtime + mode from the source file so archived entries preserve
+     * their on-disk metadata. */
     struct stat st;
-    int rc = cc_archive_add_buf(w, archive_path, buf, (size_t)sz);
-    if (rc == 0 && stat(disk_path, &st) == 0) {
-        zip_wr_entry *e = &w->entries[w->count - 1];
-        epoch_to_dos((uint64_t)st.st_mtime, &e->dos_time, &e->dos_date);
-        /* Note: we wrote the local header before stat — the central
-         * directory uses e->dos_time/date below so the result is at least
-         * correct in the listing. Local-header time is already on disk. */
+    int have_st = (stat(disk_path, &st) == 0);
+    uint64_t mtime = have_st ? (uint64_t)st.st_mtime : (uint64_t)time(NULL);
+    uint32_t mode  = have_st ? ((uint32_t)st.st_mode & 07777u) : 0644u;
+
+    int rc;
+    if (w->format == CC_ARCHIVE_TAR) {
+        rc = tar_add_buf_meta(w, archive_path, buf, (size_t)sz, mtime, mode, '0');
+    } else {
+        rc = cc_archive_add_buf(w, archive_path, buf, (size_t)sz);
+        if (rc == 0 && w->format == CC_ARCHIVE_ZIP) {
+            zip_wr_entry *e = &w->entries[w->count - 1];
+            epoch_to_dos(mtime, &e->dos_time, &e->dos_date);
+            /* Local header timestamp is already written; central directory
+             * picks up the patched time when finish() runs. */
+        }
     }
     free(buf);
     return rc;
@@ -1424,7 +1517,25 @@ int cc_archive_add_file(cc_archive_writer *w, const char *archive_path,
 
 int cc_archive_add_dir(cc_archive_writer *w, const char *archive_path)
 {
-    if (!w || w->format != CC_ARCHIVE_ZIP || !archive_path) return -1;
+    if (!w || !archive_path) return -1;
+    if (w->format == CC_ARCHIVE_TAR) {
+        size_t plen = strlen(archive_path);
+        char *with_slash = NULL;
+        const char *name = archive_path;
+        if (plen == 0 || archive_path[plen - 1] != '/') {
+            with_slash = malloc(plen + 2);
+            if (!with_slash) return -1;
+            memcpy(with_slash, archive_path, plen);
+            with_slash[plen] = '/';
+            with_slash[plen + 1] = '\0';
+            name = with_slash;
+        }
+        int rc = tar_add_buf_meta(w, name, NULL, 0,
+                                  (uint64_t)time(NULL), 0755u, '5');
+        free(with_slash);
+        return rc;
+    }
+    if (w->format != CC_ARCHIVE_ZIP) return -1;
     /* Ensure trailing slash for ZIP directory entries. */
     size_t plen = strlen(archive_path);
     char *with_slash = NULL;
@@ -1460,6 +1571,12 @@ int cc_archive_add_dir(cc_archive_writer *w, const char *archive_path)
 int cc_archive_finish(cc_archive_writer *w)
 {
     if (!w || !w->fp) return -1;
+    if (w->format == CC_ARCHIVE_TAR) {
+        /* End-of-archive marker: two empty 512-byte blocks. */
+        uint8_t zeros[1024] = {0};
+        if (fwrite(zeros, 1, 1024, w->fp) != 1024) return -1;
+        return (fflush(w->fp) == 0) ? 0 : -1;
+    }
     if (w->format != CC_ARCHIVE_ZIP) return -1;
 
     uint64_t cd_offset = w->cur_offset;
