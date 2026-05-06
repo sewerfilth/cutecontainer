@@ -148,7 +148,18 @@ int depo_join(const char *part0_path, const char *out_path);
 
 /* ---- Fuse management ---- */
 
-int depo_fuse_refresh(const char *path, const char *refresh_key,
+/* Refill fuses on a fuse-box-locked file using its delegated refresh key.
+ *
+ * INCOMPLETE — this rewrites the fuse chain in the header but does not
+ * re-encrypt the payload, so the file becomes unreadable until the full
+ * refresh implementation lands (it needs to decrypt the payload with the
+ * current chain, generate a new chain, then re-encrypt under the new
+ * chain — i.e. the lock path replayed). The wire-up is in place so the
+ * GUI flow is testable end-to-end once that's done.
+ *
+ * new_fuses=0 restores to the file's original max_fuses. */
+int depo_fuse_refresh(const char *path,
+                      const char *refresh_key,
                       uint16_t new_fuses);
 
 /* ---- Security helpers ---- */

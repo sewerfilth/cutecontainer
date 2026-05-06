@@ -91,7 +91,7 @@ static void usage(void)
         "  cutecontainer archive create  [-f <fmt>] <out> <files...>\n"
         "\n"
         "Fuse refresh (re-fill fuses on a fuse-box locked file):\n"
-        "  cutecontainer refresh -k <key> [--fuses N] <file.cute>\n"
+        "  cutecontainer refresh -p <pw> -k <key> [--fuses N] <file.cute>\n"
     );
 }
 
@@ -470,28 +470,45 @@ static int cmd_refresh(int argc, char **argv)
     const char *file = NULL;
     const char *refresh_key = NULL;
     uint16_t new_fuses = 0;
+    int force = 0;
 
     for (int i = 0; i < argc; i++) {
         if ((!strcmp(argv[i], "-k") || !strcmp(argv[i], "--key")) && i + 1 < argc)
             refresh_key = argv[++i];
         else if (!strcmp(argv[i], "--fuses") && i + 1 < argc)
             new_fuses = (uint16_t)atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--force"))
+            force = 1;
         else if (!file)
             file = argv[i];
     }
 
     if (!file || !refresh_key) {
         fprintf(stderr,
-            "usage: refresh -k <refresh-key> [--fuses N] <file.cute>\n"
+            "usage: refresh -k <refresh-key> [--fuses N] [--force] <file.cute>\n"
             "  Requires the file to have been locked with --fuse-box and\n"
-            "  --refresh-key. With --fuses 0 the fuse vault is restored to\n"
-            "  the file's original max_fuses.\n");
+            "  --refresh-key. With --fuses 0 (default) the fuse vault is\n"
+            "  restored to the file's original max_fuses.\n");
         return 1;
+    }
+
+    if (!force) {
+        fprintf(stderr,
+            "WARNING: refresh is currently incomplete in libcutecontainer.\n"
+            "         It rewrites the fuse chain header but does NOT re-encrypt\n"
+            "         the payload, so the file will be unreadable afterwards\n"
+            "         until the depo internals are extended to also re-key the\n"
+            "         payload under the new chain.\n"
+            "         Pass --force to proceed anyway (you'll need a backup).\n");
+        return 2;
     }
 
     int rc = depo_fuse_refresh(file, refresh_key, new_fuses);
     if (rc != 0) { fprintf(stderr, "error: refresh failed (%d)\n", rc); return 1; }
     printf("refreshed %s\n", file);
+    fprintf(stderr,
+        "note: this build's refresh leaves the payload encrypted under the OLD\n"
+        "      chain — unlock will fail with \"invalid outer fuse preimage\".\n");
     return 0;
 }
 

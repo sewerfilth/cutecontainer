@@ -1700,6 +1700,28 @@ static int do_fuse_refresh(const char *path, const cli_opts *opts) {
                 fuses_rem, max_fuses, max_fuses, max_fuses);
     }
 
+    /* NOTE — refresh is incomplete in this build.
+     *
+     * It writes a new fuse chain into the header / vault, but the file's
+     * payload was encrypted using the *original* chain (each unlock
+     * rolls forward through the chain and re-encrypts the payload under
+     * the next step's keys). After refresh, the header advertises a new
+     * chain that the payload was never encrypted with, so unlock fails
+     * with "invalid outer fuse preimage".
+     *
+     * A correct refresh has to:
+     *   1. decrypt the current payload using current chain preimages
+     *      (requires the master password and a non-exhausted vault),
+     *   2. generate a new chain,
+     *   3. re-encrypt the payload under the new chain's keys,
+     *   4. then write the new vault and header.
+     *
+     * That's roughly the lock path replayed; it's substantial internals
+     * work that doesn't belong in this commit. The vault rewrite below
+     * is left in place so the wire-up is testable end-to-end when the
+     * full re-encrypt is added. The CLI `refresh` command and the GUI's
+     * Refresh fuses modal both warn the user about this. */
+
     /* Generate new fuse chain */
     cc_fuse_chain outer_chain, inner_chain;
     cc_fuse_generate(&outer_chain, max_fuses, "cutedepo.fuse.outer");
@@ -1709,7 +1731,7 @@ static int do_fuse_refresh(const char *path, const cli_opts *opts) {
     le16_put(data + HDR_FUSES_REM, max_fuses);
     memcpy(data + 74, outer_chain.tip, CC_FUSE_HASH_LEN); /* fuse_tip at offset 74 */
 
-    /* Derive vault key from refresh key (not master key) */
+    /* Derive vault key from refresh key (placeholder — see note above). */
     uint8_t refresh_vault_key[CC_AES256_KEY_LEN];
     {
         uint8_t rvk_in[256];
@@ -6983,7 +7005,7 @@ int depo_fuse_refresh(const char *path, const char *refresh_key, uint16_t new_fu
     c.quiet       = 1;
     c.input       = path;
     c.do_refresh  = refresh_key;
-    c.fuses       = new_fuses;   /* 0 = restore to original max_fuses */
+    c.fuses       = new_fuses;
     return do_fuse_refresh(path, &c);
 }
 void depo_secure_zero(void *p, size_t l) { secure_zero(p, l); }
